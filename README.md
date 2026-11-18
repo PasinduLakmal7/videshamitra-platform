@@ -21,30 +21,7 @@ web/
 
 ---
 
-## 🚀 Quick Start
 
-### 1. Backend (`web-backend`)
-```bash
-cd web-backend
-python -m venv venv
-venv\Scripts\activate  # Windows
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
-```
-
-### 2. Worker Frontend (`web-frontend`)
-```bash
-cd web-frontend
-npm install
-npm run dev
-```
-
-### 3. Admin Frontend (`admin-frontend`)
-```bash
-cd admin-frontend
-npm install
-npm run dev -- --port 5174
-```
 
 ---
 
