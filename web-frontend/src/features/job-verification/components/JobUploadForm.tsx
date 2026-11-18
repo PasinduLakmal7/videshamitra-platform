@@ -1,0 +1,1 @@
+import React from 'react'; export const JobUploadForm: React.FC = () => <div>Upload Job Offer</div>;

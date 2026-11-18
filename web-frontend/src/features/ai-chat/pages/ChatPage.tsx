@@ -1,0 +1,1 @@
+import React from 'react'; export const ChatPage: React.FC = () => <div>AI Chat Safety Assistant</div>;

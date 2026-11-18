@@ -1,0 +1,1 @@
+import React from 'react'; export const VerificationResult: React.FC = () => <div>Verification Results</div>;

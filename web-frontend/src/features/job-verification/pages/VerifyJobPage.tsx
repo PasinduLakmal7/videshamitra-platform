@@ -1,0 +1,1 @@
+import React from 'react'; export const VerifyJobPage: React.FC = () => <div>Verify Job Offer</div>;

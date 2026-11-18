@@ -1,0 +1,1 @@
+import React from 'react'; export const CaseDetailsPage: React.FC = () => <div>Case Details</div>;

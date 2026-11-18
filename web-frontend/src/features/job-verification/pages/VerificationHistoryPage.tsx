@@ -1,0 +1,1 @@
+import React from 'react'; export const VerificationHistoryPage: React.FC = () => <div>Verification History</div>;

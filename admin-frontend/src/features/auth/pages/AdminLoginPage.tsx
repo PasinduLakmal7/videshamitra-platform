@@ -1,0 +1,1 @@
+import React from 'react'; export const AdminLoginPage: React.FC = () => <div>Admin Login</div>;

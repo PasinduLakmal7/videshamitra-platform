@@ -1,0 +1,1 @@
+import React from 'react'; export const RiskIndicator: React.FC = () => <div>Risk Indicator</div>;
