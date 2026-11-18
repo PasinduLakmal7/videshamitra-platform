@@ -1,39 +1,74 @@
-version: '3.8'
-
 services:
+  # Kong API Gateway (DB-less mode)
+  kong:
+    image: kong:3.9
+    container_name: videshamitra-kong
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /kong/kong.yml
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+      KONG_ADMIN_LISTEN: "off"
+    volumes:
+      - ./infra/kong/kong.yml:/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - web-backend
+    networks:
+      - videshamitra-net
+
+  # FastAPI Backend Service (Internal to Docker network)
   web-backend:
     build:
       context: ./web-backend
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+    container_name: videshamitra-backend
+    expose:
+      - "8000"
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@localhost:54322/postgres}
       - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_KEY=${SUPABASE_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - CORS_ORIGINS=["http://localhost:5173","http://localhost:5174"]
     volumes:
       - ./web-backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - videshamitra-net
 
+  # Worker Portal (React + Vite)
   web-frontend:
     build:
       context: ./web-frontend
       dockerfile: Dockerfile
+    container_name: videshamitra-web-frontend
     ports:
       - "5173:5173"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000/api/v1
     volumes:
       - ./web-frontend:/app
       - /app/node_modules
-    command: npm run dev -- --host
+    networks:
+      - videshamitra-net
 
+  # Caseworker Admin Dashboard (React + Vite)
   admin-frontend:
     build:
       context: ./admin-frontend
       dockerfile: Dockerfile
+    container_name: videshamitra-admin-frontend
     ports:
       - "5174:5174"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000/api/v1
     volumes:
       - ./admin-frontend:/app
       - /app/node_modules
-    command: npm run dev -- --host --port 5174
+    networks:
+      - videshamitra-net
+
+networks:
+  videshamitra-net:
+    driver: bridge
