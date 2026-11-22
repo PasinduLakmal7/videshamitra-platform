@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import NotFound
-from app.core.internal_auth import require_service
+from app.core.internal_auth import require_service, require_service_from
 from app.db.pool import get_connection
 from app.models.entities import ServiceIdentity
 from app.repositories.agency_repository import AgencyRepository
@@ -22,12 +22,13 @@ from app.services.document_service import DocumentService
 from app.utils.file_processing import sanitize_filename
 
 router = APIRouter(dependencies=[Depends(require_service)])
+require_ai_service = require_service_from("ai-service")
 
 
 @router.get("/documents/{document_id}/content")
 async def document_content(
     document_id: UUID,
-    identity: ServiceIdentity = Depends(require_service),
+    identity: ServiceIdentity = Depends(require_ai_service),
     conn: asyncpg.Connection = Depends(get_connection),
 ):
     service = DocumentService()
@@ -55,7 +56,7 @@ async def document_content(
 @router.get("/agencies/{agency_id}/license-history")
 async def agency_license_history(
     agency_id: UUID,
-    identity: ServiceIdentity = Depends(require_service),
+    identity: ServiceIdentity = Depends(require_ai_service),
     conn: asyncpg.Connection = Depends(get_connection),
 ):
     repo = AgencyRepository()
@@ -78,7 +79,7 @@ async def agency_license_history(
 @router.get("/verifications/{verification_id}")
 async def verification_context(
     verification_id: UUID,
-    identity: ServiceIdentity = Depends(require_service),
+    identity: ServiceIdentity = Depends(require_ai_service),
     conn: asyncpg.Connection = Depends(get_connection),
 ):
     row = await VerificationRepository().get(conn, verification_id)

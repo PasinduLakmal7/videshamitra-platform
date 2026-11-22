@@ -84,6 +84,7 @@ def test_internal_token_expiry() -> None:
             "iss": "ai-service",
             "aud": "core-api",
             "sub": "ai-service",
+            "iat": int((now - timedelta(minutes=6)).timestamp()),
             "exp": int((now - timedelta(minutes=5)).timestamp()),
         },
         settings.INTERNAL_JWT_SECRET,
