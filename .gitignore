@@ -11,8 +11,8 @@ venv/
 .venv/
 env/
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Testing and coverage
 coverage/
@@ -50,6 +50,8 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Internal planning (not published)
+# Internal planning and local agent files (not published)
+docs/scope/
 docs/work-division.md
 docs/person-1-plan.md
+CLAUDE.md
