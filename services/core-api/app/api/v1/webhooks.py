@@ -26,7 +26,7 @@ CONSUMER = "whatsapp-webhook"
 
 def _verify_signature(raw: bytes, signature: str | None) -> None:
     if not settings.WHATSAPP_APP_SECRET:
-        if settings.is_production:
+        if not settings.is_dev:
             raise ServiceUnavailable(
                 "WhatsApp webhook secret is not configured",
                 code="webhook_not_configured",

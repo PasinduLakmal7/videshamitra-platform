@@ -11,10 +11,19 @@ import json
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["development", "test", "staging", "production"]
+
+DEV_ENVIRONMENTS = frozenset({"development", "test"})
+MIN_SECRET_LENGTH = 32
+KNOWN_INSECURE_SECRETS = frozenset(
+    {
+        "super-secret-jwt-token-with-at-least-32-characters-long",
+        "replace-with-a-long-random-internal-secret",
+    }
+)
 
 
 class Settings(BaseSettings):
@@ -30,7 +39,7 @@ class Settings(BaseSettings):
     SERVICE_NAME: str = "core-api"
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
-    ENVIRONMENT: Environment = "development"
+    ENVIRONMENT: Environment = "production"
     LOG_LEVEL: str = "INFO"
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173", "http://localhost:5174"]
@@ -55,11 +64,12 @@ class Settings(BaseSettings):
 
     # --- Auth fallbacks / limits ----------------------------------------
     OTP_RATE_LIMIT_PER_10_MIN: int = 5
+    LOGIN_RATE_LIMIT_PER_10_MIN: int = 10
     AUTH_DEV_OTP: str = ""
 
     # --- Redis / events --------------------------------------------------
     REDIS_URL: str = "redis://localhost:6379/0"
-    INTERNAL_JWT_SECRET: str = Field(min_length=16)
+    INTERNAL_JWT_SECRET: str = Field(min_length=MIN_SECRET_LENGTH)
     INTERNAL_JWT_ISSUER: str = "core-api"
     INTERNAL_JWT_AUDIENCE: str = "core-api"
     INTERNAL_ALLOWED_ISSUERS: list[str] = Field(
@@ -85,6 +95,7 @@ class Settings(BaseSettings):
     # --- Domain workers --------------------------------------------------
     CHECKIN_GRACE_HOURS: int = 72
     STALE_PROCESSING_MINUTES: int = 15
+    MAX_VERIFICATION_RETRIES: int = Field(default=3, ge=0)
     AGENCY_MONITOR_INTERVAL_SECONDS: int = 3600
     CHECKIN_SCHEDULER_INTERVAL_SECONDS: int = 60
     IDEMPOTENCY_TTL_HOURS: int = 24
@@ -116,9 +127,29 @@ class Settings(BaseSettings):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
+    @model_validator(mode="after")
+    def _reject_insecure_outside_dev(self) -> Settings:
+        if self.is_dev:
+            return self
+        if self.AUTH_DEV_OTP:
+            raise ValueError("AUTH_DEV_OTP is only allowed in development or test")
+        for name in ("INTERNAL_JWT_SECRET", "SUPABASE_JWT_SECRET"):
+            value = getattr(self, name)
+            if value and (
+                value in KNOWN_INSECURE_SECRETS
+                or value.startswith("replace-with")
+                or len(value) < MIN_SECRET_LENGTH
+            ):
+                raise ValueError(f"{name} is a placeholder or too weak for {self.ENVIRONMENT}")
+        return self
+
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def is_dev(self) -> bool:
+        return self.ENVIRONMENT in DEV_ENVIRONMENTS
 
     @property
     def supabase_api_url(self) -> str:

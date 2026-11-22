@@ -101,10 +101,10 @@ async def verify_supabase_token(token: str) -> dict[str, Any]:
 def create_dev_token(user_id: str, *, ttl_seconds: int = 3600) -> str:
     """Development-only HS256 token accepted by the local Supabase secret.
 
-    Refused in production by the caller. Useful for local demos without an SMS
+    Refused outside development and test. Useful for local demos without an SMS
     provider when `AUTH_DEV_OTP` is configured.
     """
-    if settings.is_production:
+    if not settings.is_dev:
         raise Unauthorized("Dev tokens are disabled", code="auth_not_configured")
     if not settings.SUPABASE_JWT_SECRET:
         raise Unauthorized("Dev token secret is not configured", code="auth_not_configured")

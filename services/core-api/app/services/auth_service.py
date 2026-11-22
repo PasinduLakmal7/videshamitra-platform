@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 from typing import Any
 from uuid import UUID
@@ -43,22 +45,33 @@ class AuthService:
         self.audit = audit or AuditService()
         self.user_service = UserService(self.users, self.audit)
 
-    async def _rate_limit(self, *, ip: str | None, phone: str | None) -> None:
+    async def _rate_limit(
+        self,
+        *,
+        scope: str,
+        ip: str | None,
+        subject: str | None,
+        limit: int,
+        fail_closed: bool = True,
+    ) -> None:
+        subject_key = hashlib.sha256((subject or "unknown").encode()).hexdigest()[:32]
+        keys = [f"{scope}:ip:{ip or 'unknown'}", f"{scope}:subject:{subject_key}"]
         try:
             client = redis_db.get_client()
-            keys = [f"otp:ip:{ip or 'unknown'}", f"otp:phone:{phone or 'unknown'}"]
             pipe = client.pipeline()
             for key in keys:
                 pipe.incr(key)
                 pipe.expire(key, 600)
             counts = await pipe.execute()
-            if any(int(count) > settings.OTP_RATE_LIMIT_PER_10_MIN for count in counts[::2]):
-                raise RateLimited("Too many OTP requests; try again later")
-        except RateLimited:
-            raise
-        except Exception:
-            # Redis being down must not make auth unusable; log and continue.
-            logger.warning("otp_rate_limit_unavailable")
+        except Exception as exc:
+            logger.warning("auth_rate_limit_unavailable", extra={"scope": scope})
+            if fail_closed:
+                raise ServiceUnavailable(
+                    "Sign-in is temporarily unavailable", code="rate_limit_unavailable"
+                ) from exc
+            return
+        if any(int(count) > limit for count in counts[::2]):
+            raise RateLimited("Too many attempts; try again later")
 
     async def _profile(self, conn: asyncpg.Connection, auth_user: dict[str, Any]) -> asyncpg.Record:
         user_id = UUID(str(auth_user["id"]))
@@ -140,6 +153,13 @@ class AuthService:
         payload: LoginRequest,
         request: RequestInfo,
     ) -> SessionResponse:
+        await self._rate_limit(
+            scope="login",
+            ip=request.ip_address,
+            subject=payload.email.lower(),
+            limit=settings.LOGIN_RATE_LIMIT_PER_10_MIN,
+            fail_closed=False,
+        )
         session = await self.client.password_login(email=payload.email, password=payload.password)
         auth_user = session.get("user") or {}
         profile = await self._profile(conn, auth_user)
@@ -162,17 +182,18 @@ class AuthService:
         payload: OtpRequest,
         request: RequestInfo,
     ) -> dict[str, Any]:
-        await self._rate_limit(ip=request.ip_address, phone=payload.phone)
+        await self._rate_limit(
+            scope="otp",
+            ip=request.ip_address,
+            subject=payload.phone,
+            limit=settings.OTP_RATE_LIMIT_PER_10_MIN,
+        )
         data = {
             "full_name": payload.full_name,
             "preferred_language": payload.preferred_language.value,
         }
         await self.client.request_otp(phone=payload.phone, data=data)
-        result: dict[str, Any] = {"message": "OTP sent"}
-        if settings.AUTH_DEV_OTP and not settings.is_production:
-            result["dev_otp"] = settings.AUTH_DEV_OTP
-            logger.warning("otp_dev_fallback_enabled")
-        return result
+        return {"message": "OTP sent"}
 
     async def verify_otp(
         self,
@@ -181,10 +202,16 @@ class AuthService:
         payload: OtpVerifyRequest,
         request: RequestInfo,
     ) -> SessionResponse:
+        await self._rate_limit(
+            scope="otp_verify",
+            ip=request.ip_address,
+            subject=payload.phone,
+            limit=settings.OTP_RATE_LIMIT_PER_10_MIN,
+        )
         if (
             settings.AUTH_DEV_OTP
-            and not settings.is_production
-            and payload.token == settings.AUTH_DEV_OTP
+            and settings.is_dev
+            and hmac.compare_digest(payload.token, settings.AUTH_DEV_OTP)
         ):
             if not settings.supabase_admin_configured:
                 raise ServiceUnavailable(
@@ -205,6 +232,18 @@ class AuthService:
                     profile = await self._profile(conn, created)
             if profile is None:
                 raise Unauthorized("No account for this phone", code="user_not_found")
+            if profile["role"] != "worker" or not profile["is_active"]:
+                raise Unauthorized(
+                    "Dev OTP is limited to active worker accounts", code="dev_otp_forbidden"
+                )
+            await self.audit.record(
+                conn,
+                actor=CurrentUser.from_record(profile),
+                action="auth.dev_otp_login",
+                entity_type="user",
+                entity_id=profile["id"],
+                request=request,
+            )
             token = create_dev_token(str(profile["id"]))
             return SessionResponse(
                 access_token=token,
