@@ -1,16 +1,49 @@
-# React + Vite
+# VideshaMitra Admin Portal
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Caseworker and administrator console for the migration-safety platform.
 
-Currently, two official plugins are available:
+- **Stack:** React 19 + Vite + TypeScript
+- **API:** `services/core-api` (`/api/v1`), through Kong in production
+- **Auth:** staff email/password through `POST /auth/login`; worker accounts are
+  rejected by both the portal and the API role guards
+- **Roles:** `caseworker` (cases/agencies), `admin` (also users/audit/imports)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Pages
 
-## React Compiler
+| Route | Page | Access |
+|---|---|---|
+| `/login` | Staff sign-in | public |
+| `/` | Dashboard metrics + recent activity | staff |
+| `/cases` | Case queue with status/tier/search filters | staff |
+| `/cases/:id` | Case detail, evidence, documents, AI trace, notes, status/assignee, escalate | staff |
+| `/agencies` | Agency search/license history, admin edit + SLBFE import | staff read, admin write |
+| `/users` | User list, role/status changes | admin |
+| `/audit` | Audit log filters + metadata detail | admin |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Local setup
 
-## Expanding the ESLint configuration
+```bash
+npm install
+cp .env.example .env      # VITE_API_BASE_URL=http://localhost:8000/api/v1
+npm run dev               # http://localhost:5174
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+If `VITE_API_BASE_URL` is unset the dev server proxies `/api` to
+`http://localhost:8000`.
+
+## Verification
+
+```bash
+npm run lint
+npm run typecheck
+npm run build
+```
+
+Generated API types come from the committed OpenAPI contract:
+
+```bash
+npm run generate:api      # writes src/types/api.generated.ts
+```
+
+Do not edit `src/types/api.generated.ts` by hand. Playwright E2E is still
+pending; see [`docs/progress.md`](../docs/progress.md).
