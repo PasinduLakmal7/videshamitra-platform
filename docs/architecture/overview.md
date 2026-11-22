@@ -9,8 +9,8 @@ VideshaMitra is a multilingual, agentic AI migration-safety companion designed t
 | Service | Responsibility | Public |
 |---|---|---|
 | `core-api` | Auth/users, agencies/SLBFE, verification orchestration, documents, journeys, check-ins, complaints/cases, in-app notifications, admin, audit, chat proxy | **Yes** via Kong |
-| `ai-service` | LangGraph, OCR, LLM, speech, chat sessions, AI traces, checkpoints | No |
-| `notification-service` | Device tokens, preferences, Expo/FCM/WhatsApp delivery, retries, delivery status | No |
+| `ai-service` | LangGraph, OCR, LLM (Gemini), speech, chat sessions, AI traces, checkpoints (planned) | No |
+| `notification-service` | Device tokens, preferences, FCM/WhatsApp delivery, retries, delivery status (planned) | No |
 | Kong | Public gateway, CORS, rate limits | Edge |
 | Supabase | Postgres, Auth, Storage | Infrastructure |
 | Redis | Event streams / async jobs | Infrastructure |
@@ -19,7 +19,7 @@ VideshaMitra is a multilingual, agentic AI migration-safety companion designed t
 
 | Channel | Users | Calls |
 |---|---|---|
-| Worker mobile app (separate repo) | Migrant workers | Kong → `core-api` |
+| Worker mobile app (Flutter, separate repo) | Migrant workers | Kong → `core-api` |
 | Worker web portal | Migrant workers | Kong → `core-api` |
 | Admin portal | Caseworkers and admins | Kong → `core-api` |
 | WhatsApp webhook | Workers | Kong → `core-api` (proxied to `ai-service` where needed) |
@@ -46,7 +46,7 @@ Services reference each other by ID only. There are no cross-schema joins or for
 
 ## Deployment
 
-- Local: Kong + `core-api` + `core-api-worker` + `ai-service` + `notification-service` + Redis, with Supabase via CLI.
+- Local: Kong + `core-api` + `core-api-worker` + Redis in Compose, with Supabase via CLI. `ai-service` and `notification-service` join the internal network when they are built.
 - Production: one container per process, managed Postgres/Redis, Kong as the only public entry point.
 - Only `core-api` is exposed through Kong. Other services live on an internal network.
 

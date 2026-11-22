@@ -26,7 +26,7 @@ It must:
 It must not:
 
 - Run LangGraph, OCR, LLM calls, speech models, or chat sessions.
-- Store Expo/FCM/WhatsApp tokens, notification preferences, or delivery attempts.
+- Store FCM/WhatsApp tokens, notification preferences, or delivery attempts.
 - Join across the `ai` or `notification` schemas.
 - Allow clients to call internal services directly.
 
@@ -281,10 +281,10 @@ Indexes: `(actor_id)`, `(entity_type, entity_id)`, `(created_at desc)`.
 
 - Enable RLS on all core tables.
 - Helpers: `core.current_user_role()`, `core.is_staff()`, `core.is_admin()` (`security definer`, fixed `search_path`).
-- Workers read/update only their rows; staff read all; admin manages roles/agencies/audit.
+- Workers read only their rows (direct writes limited to profile, consents and notification read state since migration `011`); staff read all; admin manages roles/agencies/audit.
 - `notifications` and `device`-related tables have no cross-service policies.
 - Storage bucket `documents` is private; path `{user_id}/{document_id}/{filename}`.
-- Workers can access only their path; staff read via signed URLs issued by `core-api`.
+- Workers can read only their path; only the backend writes objects (migration `011`); staff read via signed URLs issued by `core-api`.
 - Backend uses a trusted DB role and enforces authorization in services; RLS is defense-in-depth for direct Supabase access.
 
 ### Seed data
@@ -466,7 +466,7 @@ Indexes: `(actor_id)`, `(entity_type, entity_id)`, `(created_at desc)`.
 
 | Method | Path | Consumer | Notes |
 |---|---|---|---|
-| GET | `/internal/v1/documents/{id}/content` | `ai-service` | Service JWT; returns bytes or short-lived signed URL |
+| GET | `/internal/v1/documents/{id}/content` | `ai-service` | Service JWT (`iss=ai-service` only); returns raw bytes |
 | GET | `/internal/v1/agencies/{id}/license-history` | `ai-service` | Service JWT; license history for analysis |
 | GET | `/internal/v1/health` | infrastructure | Internal readiness |
 | GET | `/internal/v1/verifications/{id}` | `ai-service` | Job context if needed outside the event |
@@ -476,7 +476,9 @@ Indexes: `(actor_id)`, `(entity_type, entity_id)`, `(created_at desc)`.
 
 | Service | Method | Path | Purpose |
 |---|---|---|---|
+| `ai-service` | GET | `/internal/v1/health` | Probed by core `/ready` (non-critical) |
 | `ai-service` | POST | `/internal/v1/chat/sessions` | Create chat session |
+| `ai-service` | GET | `/internal/v1/chat/sessions?user_id=` | List a worker's sessions |
 | `ai-service` | GET | `/internal/v1/chat/sessions/{id}` | Session metadata |
 | `ai-service` | POST | `/internal/v1/chat/sessions/{id}/messages` | SSE chat stream |
 | `ai-service` | POST | `/internal/v1/speech/transcribe` | STT |
@@ -905,10 +907,10 @@ Use `CORE-xx` in commits/PRs.
 
 #### CORE-22 — Internal service endpoints
 
-**Files:** `app/api/internal/documents.py`, `app/api/internal/agencies.py`
+**Files:** `app/api/internal/router.py`
 
 - Service-JWT protected.
-- Return bytes or a short-lived signed URL.
+- Return raw bytes.
 - Add the agency license-history endpoint for AI analysis.
 - Audit AI access (no document content in logs).
 - Enforce size/time limits.
@@ -1183,7 +1185,7 @@ Use `CORE-xx` in commits/PRs.
 
 **Files:** `docker-compose.yml`, `infra/kong/kong.yml`, Dockerfiles
 
-- Services: `core-api`, `core-api-worker`, `ai-service`, `notification-service`, `redis`, `kong`.
+- Services: `core-api`, `core-api-worker`, `redis`, `kong` (`ai-service` and `notification-service` added by their owners).
 - Internal network for services; only Kong published.
 - Healthchecks and `depends_on` conditions.
 - Kong routes only `/api/v1` and `/health` to core-api.
@@ -1204,7 +1206,7 @@ Use `CORE-xx` in commits/PRs.
 
 #### CORE-48 — Documentation and cleanup
 
-**Files:** `README.md`, `docs/architecture/*`, `docs/api/*`, `docs/database/*`, `docs/work-division.md`
+**Files:** `README.md`, `docs/architecture/*`, `docs/api/*`, `docs/database/*` (the work division is kept locally in `docs/scope/work-division.md`, gitignored)
 
 - Update setup for the 3-service architecture.
 - Document public vs internal APIs, events, data ownership.
@@ -1396,7 +1398,7 @@ Both use the same image and code; different commands. This is not a separate mic
 
 ### Compose services
 
-`kong`, `core-api`, `core-api-worker`, `ai-service`, `notification-service`, `redis`, plus local Supabase via CLI.
+`kong`, `core-api`, `core-api-worker`, `redis`, plus local Supabase via CLI. `ai-service` and `notification-service` join the internal network when built.
 
 ### Release checklist
 
@@ -1492,7 +1494,6 @@ README.md
 docs/architecture/overview.md
 docs/api/endpoints.md
 docs/database/schema.md
-docs/work-division.md
 ```
 
 ### Delete

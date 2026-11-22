@@ -14,7 +14,7 @@
 - Give the **AI workload** its own deployable unit: long-running OCR/LLM jobs, LangGraph checkpoints, chat streaming, and speech.
 - Give **notification delivery** its own deployable unit: device tokens, preferences, retries, and channel-specific failures.
 - Keep the transactional core (identity, agencies, verification records, documents, journeys, check-ins, complaints, admin) in one service with one database.
-- Keep the system operable by a two-person team.
+- Keep the system operable by a three-person team.
 
 ## 2. Services
 
@@ -22,7 +22,7 @@
 |---|---|---|---|
 | `core-api` | Auth/users, agencies/SLBFE, verification orchestration, document metadata/storage, journeys, check-ins, complaints/cases, in-app notification feed, admin, audit, chat proxy | **Yes** (via Kong) | Person 1 |
 | `ai-service` | LangGraph agents, OCR/document extraction, LLM calls, chat sessions/streaming, speech STT/TTS, AI traces, checkpoints | No | Person 2 |
-| `notification-service` | Device tokens, notification preferences, Expo/FCM/WhatsApp delivery, retries, delivery status | No | Person 1 |
+| `notification-service` | Device tokens, notification preferences, FCM/WhatsApp delivery, retries, delivery status | No | Person 1 |
 | Kong | Public gateway, routing, CORS, rate limits | Edge | Person 1 |
 | Supabase | Postgres cluster, Auth, Storage | Infrastructure | Person 1 |
 | Redis | Event streams / async jobs | Infrastructure | Person 1 |
@@ -136,7 +136,7 @@ Event envelope:
 ### Chat
 
 1. Client calls `core-api /api/v1/chat`.
-2. `core-api` authenticates, rate-limits, and proxies the SSE stream to `ai-service /internal/v1/chat/stream`.
+2. `core-api` authenticates, checks attachment ownership, and proxies the SSE stream to `ai-service /internal/v1/chat/sessions/{id}/messages`. Per-user chat quotas are enforced by `ai-service`.
 3. `ai-service` owns chat sessions, LangGraph state, and traces.
 4. `core-api` streams tokens back to the client.
 
@@ -155,7 +155,7 @@ Local:
 
 ```
 Kong :8000
- └─ core-api :8001 (published internally)
+ └─ core-api :8000 (internal; only Kong publishes a host port)
      ├─ Supabase Postgres (core schema) + Auth + Storage
      ├─ Redis :6379
      ├─ ai-service :8010 (internal)
@@ -196,10 +196,10 @@ videshamitra-platform/
 └── .github/
 ```
 
-Migration from the original scaffold (completed):
+Migration from the original scaffold:
 
-1. Move `web-backend/` → `services/core-api/`.
-2. Add `services/ai-service/` and `services/notification-service/` skeletons.
+1. Move `web-backend/` → `services/core-api/` (done).
+2. Add `services/ai-service/` (Person 2, not started) and `services/notification-service/` (README placeholder only).
 3. Add `packages/contracts/`.
 4. Add Redis + outbox to Compose.
 5. Add per-service migrations and roles.
@@ -209,8 +209,8 @@ Migration from the original scaffold (completed):
 
 - No distributed transactions. Use the outbox, idempotent consumers, and compensating actions.
 - Verification state machine: `pending → processing → verified | suspicious | fraudulent | failed`.
-- A stale `processing` verification is re-queued after a timeout; retries are bounded.
-- If AI-service is down, verifications stay queued and the client sees `processing`; no data is lost.
+- Core never sets `processing` itself; a verification stuck in `pending` or `processing` past the timeout is re-queued with a new `event_id`, and marked `failed` (`analysis_timeout`) after the retry cap.
+- If AI-service is down, verifications stay queued and the client sees `pending`; no data is lost.
 - If notification-service is down, notification requests stay in the stream/outbox and are retried.
 - Dead-letter streams are monitored; an operator can replay events.
 - Event consumers store `event_id` in a dedupe table before applying side effects.

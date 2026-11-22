@@ -1,9 +1,9 @@
 # Project Progress
 
 **Last updated:** 2026-11-22
-**Current phase:** M0–M4 core backend implemented; M5 admin portal pages in place; AI/notification services and live-Supabase verification pending
-**Team:** 2 people across 3 services
-**Mobile app:** separate repository (docs/contracts only here)
+**Current phase:** M0–M4 core backend implemented and security-hardened; M5 admin portal pages in place; AI/notification services, worker web and live-Supabase verification pending
+**Team:** 3 people — Person 1 platform/core/admin/infra, Person 2 AI (`ai-service`), Person 3 worker web + Flutter mobile + research
+**Mobile app:** Flutter, separate repository (docs/contracts only here)
 
 > This document is updated after **every agent run**. See [`agent-rules.md`](../agent-rules.md) for the mandatory update rules.
 >
@@ -18,15 +18,15 @@
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI/notification stubs |
-| AI service (`ai-service`) | ⏸️ Not started | Person 2 | Consume `verification.requested.v1` |
+| AI service (`ai-service`) | ⏸️ Not started; contract documented | Person 2, `docs/ai-agents/multi-agent-spec.md` | Phase 1 skeleton (local roadmap) |
 | Notification service | ⏸️ Placeholder | `services/notification-service/README.md` | Implement device/preference/delivery |
-| Worker web (`web-frontend`) | ⏸️ Scaffold only | Vite scaffold; pages empty | Person 2 |
+| Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
-| Database | ✅ Migrations 001–010 + seed | `services/core-api/migrations`, verified on Postgres 15 | RLS verification under `authenticated` |
-| Auth | 🚧 Supabase proxy + JWT verification | `app/core/security.py`, `app/services/auth_service.py` | Live Supabase login/OTP test |
-| Tests | ✅ Unit/contract; integration gated | 76 pass, 1 skipped (needs `TEST_DATABASE_URL`) | Add event round-trip + E2E with stubs |
+| Database | ✅ Migrations 001–011 + seed | `services/core-api/migrations`; 001–011 verified on Postgres 16 | Live Supabase storage policy check |
+| Auth | 🚧 Supabase proxy + JWT verification, hardened | `app/core/security.py`, `app/services/auth_service.py` | Live Supabase login/OTP test |
+| Tests | ✅ Unit/contract; integration gated | 100 pass, 1 skipped (needs `TEST_DATABASE_URL`) | Add event round-trip + E2E with stubs |
 | CI | ✅ Updated, not yet run on GitHub | `.github/workflows/ci.yml` | Watch first run |
-| Infrastructure | 🚧 Compose/Kong valid; image builds | `docker-compose.yml`, `infra/kong/kong.yml`, image health check verified | Full stack with Supabase + workers |
+| Infrastructure | 🚧 Compose/Kong valid; core + frontend images build | `docker-compose.yml`, `infra/kong/kong.yml`, nginx-unprivileged frontend images | Full stack with Supabase + workers |
 
 **Legend:** ✅ done · 🚧 in progress · ⏸️ planned/scaffold · ⚠️ needs attention · ⛔ blocked · 📄 external
 
@@ -63,7 +63,7 @@
 |---|---|
 | Service boundaries, data ownership, events | `docs/architecture/microservices.md` |
 | Core API tasks and contracts | `docs/core-api-plan.md` |
-| Ownership split | `docs/work-division.md` |
+| Ownership split | `docs/scope/work-division.md` (local, gitignored) |
 | Public API | `docs/api/endpoints.md` |
 | Database schemas | `docs/database/schema.md` |
 | AI service | `docs/ai-agents/multi-agent-spec.md` |
@@ -77,7 +77,7 @@
 - [x] Three-service architecture defined (`core-api`, `ai-service`, `notification-service`).
 - [x] Data ownership, event flows, auth, and deployment topology documented.
 - [x] Core API implementation plan written with 50 tasks (`CORE-01` → `CORE-50`).
-- [x] Work division updated for 2 people across 3 services.
+- [x] Work division updated for 2 people across 3 services (superseded by the 3-person split).
 - [x] README, API, database, AI, Kong, and architecture docs aligned to the service model.
 - [x] Mobile app documented as a separate repository.
 - [x] Agent rules created.
@@ -91,14 +91,16 @@
 - [x] `CORE-34`–`CORE-35` dashboard, users, audit admin APIs.
 - [x] `CORE-36`–`CORE-38` chat/speech/WhatsApp proxies and admin AI trace proxy.
 - [x] `CORE-39`–`CORE-43` admin portal shell, login, dashboard, cases, case detail, agencies, users, audit.
-- [x] `CORE-45`–`CORE-46` CI rewrite and Compose/Kong (validated config; image build pending).
+- [x] `CORE-45`–`CORE-46` CI rewrite and Compose/Kong (validated config; core image builds).
 - [x] Migrations `001`–`010` and demo seed verified against Postgres 15.
 - [x] Unit/contract suite: 76 passing, 1 integration test gated on `TEST_DATABASE_URL`.
 - [x] Live smoke test against Postgres + Redis: auth/me, dashboard, cases, agencies, users, check-ins, idempotent verification, outbox publish, duplicate AI result, high-risk escalation, case resolve, audit.
-- [x] RLS verified as `authenticated`: worker sees only own rows, cannot change own role; staff see all users/cases; audit is admin-only.
+- [x] RLS read paths verified as `authenticated`: worker sees only own rows, cannot change own role; staff see all users/cases; audit is admin-only. (Write policies were not covered; direct worker writes were removed in `011`.)
 - [x] Core image built; container starts and `/health` responds (readiness correctly 503 without Redis/storage).
 - [x] Kong declarative config parses successfully.
 - [x] Whole-platform architecture document added (`docs/architecture/system-architecture.md`), linked from README and architecture docs.
+- [x] Security audit fixes (critical/high): dev OTP lock-down, insecure-default rejection, `ENVIRONMENT` defaults to production, RLS/storage write lock-down (`011`), OTP/login rate limits fail closed with trusted client IP, stale `pending` recovery with retry cap, check-in consent revoke, SLBFE import source lock-down, internal token lifetime + per-route issuer, chat attachment ownership, hardened frontend images, Compose env fixes, admin session storage.
+- [x] 3-person work division, Flutter + FCM mobile docs, ai-service contract (`docs/ai-agents/multi-agent-spec.md`).
 
 ---
 
@@ -130,14 +132,25 @@
 5. Add Playwright E2E for the admin portal.
 6. Build the core image and run `docker compose up --build`; add AI/notification
    containers when their scaffolds land.
+7. Review the audit fixes on branch `audit-fixes`, then work the security backlog
+   below and change requests CR-1…CR-9 (`docs/ai-agents/multi-agent-spec.md`).
 
-### Person 2 — AI and worker web
+### Person 2 — AI (`ai-service`)
 
-1. Consume `verification.requested.v1` from `vm:ai:requests` and publish
-   `verification.completed.v1` / `verification.failed.v1` to `vm:ai:results`.
-2. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
-3. Implement chat/speech internal endpoints used by the core proxies.
-4. Scaffold the worker web against `docs/api/openapi.json`.
+1. Scaffold `services/ai-service/` (health, internal JWT, core client, Compose,
+   CI) against `docs/ai-agents/multi-agent-spec.md`.
+2. Consume `verification.requested` from `vm:ai:requests` and publish
+   `verification.completed` / `verification.failed` to `vm:ai:results`.
+3. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
+4. Implement chat/speech/WhatsApp internal endpoints used by the core proxies.
+
+### Person 3 — worker web, mobile, research
+
+1. Mount the TypeScript app in `web-frontend/` (replace the Vite starter), add
+   deps, lint/typecheck, and the CI gate.
+2. Build worker flows against `docs/api/openapi.json` (generated types).
+3. Start the Flutter app per `docs/mobile/overview.md`.
+4. Collect eval datasets (misspelt agencies, labelled ads, si/ta prompts) with Person 2.
 
 ### Shared
 
@@ -166,7 +179,12 @@
 | Contract source | Pydantic models in `app/events/schemas.py`; JSON Schemas generated into `packages/contracts` |
 | Admin auth | `admin-frontend` logs in through `core-api /auth/login`; tokens stay in the core API client (no direct Supabase browser SDK) |
 | Admin data layer | Typed `fetch` client + local hooks instead of TanStack Query (smaller surface for WS8) |
-| Dev OTP | Optional `AUTH_DEV_OTP` fallback, refused in production |
+| Team split | 3 people: P1 platform/core/admin/notification/infra, P2 all AI, P3 worker web + Flutter mobile + research/eval data |
+| Mobile stack | Flutter (Dart) + Firebase Cloud Messaging (matches the final proposal) |
+| LLM | Gemini (multimodal) behind a provider-neutral adapter in `ai-service` |
+| Planning docs | `docs/scope/` (proposals, work division, personal roadmap) and `CLAUDE.md` are local-only and gitignored |
+| Environment default | `ENVIRONMENT` defaults to `production`; dev-only features refuse to run elsewhere |
+| Dev OTP | Optional `AUTH_DEV_OTP` fallback for worker accounts only; startup fails outside development/test |
 | AI/notification Compose | Not yet included; their owners add containers to the internal network |
 
 ---
@@ -177,10 +195,12 @@
 |---|---|---|---|
 | SLBFE source format/access | Open | Person 1 | CSV/JSON importer is ready; use fixtures until the real export is confirmed |
 | SMS provider for phone OTP | Open | Person 1 | Supabase phone auth needs a provider/budget; dev OTP fallback exists |
-| Expo push credentials | Open | Person 1 | Needed for real push delivery tests |
+| FCM credentials (Firebase project) | Open | Person 1 / Person 3 | Needed for real push delivery tests |
 | Production database separation | Open | Person 1 | Separate schemas locally; separate DBs recommended in production |
 | Live Supabase verification | Open | Person 1 | Auth/Storage/RLS not exercised in this environment |
-| AI-service detailed task plan | Pending | Person 2 | Core contracts are frozen |
+| AI-service detailed task plan | Done (local roadmap) | Person 2 | Contract in `docs/ai-agents/multi-agent-spec.md` |
+| Core change requests CR-1…CR-9 | Open | Person 1 (spec: Person 2) | Needed for unable-to-verify, agency search, escalation, drafts, WhatsApp, data rights |
+| Security backlog (medium) | Open | Person 1 | Redis password; non-superuser DB role in Compose; atomic WhatsApp dedupe; pypdf off the event loop; soft delete keeps evidence; system escalation must not take drafts; stale idempotency reservations; worker loop crash isolation; caseworkers editing admins; unverified/non-unique phone; staff overturning AI verdicts; seed script env guard; audio MIME fallback; upstream error text; storage path logging; per-peer internal secrets; HttpOnly refresh cookie for admin |
 | Notification-service implementation | Pending | Person 1 | Placeholder only; contract frozen |
 | Full Compose stack | Pending | Person 1 | Image builds and runs; needs Supabase + worker + AI/notification containers |
 
@@ -191,6 +211,16 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-22 — Security audit fixes, doc alignment, 3-person split
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** core-api security (critical/high), infra, admin client, docs
+- **Changed:** `config.py` (production default, insecure-default rejection, dev-only guards); `auth_service.py` (dev OTP worker-only + audited, no code in responses, fail-closed OTP limits, login limit); `entities.py` (last XFF hop); migration `011_security_hardening.sql` (drop worker write policies on core tables and storage); stale `pending` recovery with `MAX_VERIFICATION_RETRIES`; consent-aware check-in queries; SLBFE import uses only `SLBFE_SOURCE_URL`, no redirects; internal tokens need `iat`, ≤ 300 s, AI-only routes require `iss=ai-service`; chat `session_id`/attachments are UUIDs and attachments must be the caller's documents; frontend Dockerfiles → multi-stage nginx-unprivileged with CSP; orphan `infra/docker/*` removed; Compose uses `DOCKER_*` URLs and requires `INTERNAL_JWT_SECRET`/`ENVIRONMENT`; CI sets `ENVIRONMENT=test`, read-only token, builds frontend images; admin session in `sessionStorage`; `.gitignore` (`.env.*`, `docs/scope/`, `CLAUDE.md`); docs (README, mobile → Flutter + FCM, architecture, API, schema, contracts, Kong, agent rules, AI contract)
+- **Verified:** core `pytest` 100 passed / 1 skipped; `ruff check` + `format --check`; OpenAPI regenerated and admin types regenerated; contracts current; migrations 001–011 applied twice on Postgres 16 + integration test; changed SQL executed against Postgres; admin `lint`/`typecheck`/`build`; admin + web images built, admin container checked (uid 101, SPA fallback, CSP headers); `docker compose config`. Not verified: live Supabase Auth/Storage, GitHub CI run
+- **Decisions:** Flutter + FCM; Gemini; 3-person split; `docs/scope/` local-only; medium findings moved to Person 1 backlog
+- **Blocked:** none
+- **Next:** Person 1 reviews branch `audit-fixes`; Person 2 starts the ai-service skeleton
 
 ### 2026-11-22 — Whole-platform architecture document
 

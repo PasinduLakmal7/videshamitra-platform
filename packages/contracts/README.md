@@ -27,7 +27,7 @@ Generate TypeScript types from the public OpenAPI contract:
 cd admin-frontend
 npm run generate:api
 
-# Worker web (Person 2)
+# Worker web (Person 3)
 cd web-frontend
 npx openapi-typescript ../docs/api/openapi.json -o src/types/api.generated.ts
 ```
@@ -38,10 +38,14 @@ fail if they are stale.
 
 ## Versioning policy
 
-1. Event names are immutable and end in `.v1` on the stream. The `version`
-   field inside the envelope is an integer.
+1. Event names are immutable. On the stream `event_type` has **no** version
+   suffix (`verification.completed`), and `version` is the integer `1`. The
+   `.v1` suffix appears only in schema file names and docs. A suffixed
+   `event_type` is dropped by core as unknown.
 2. Additive fields are allowed within a version only when consumers can ignore
-   them. New required fields or changed semantics require a new version.
+   them. `core-api` currently rejects unknown envelope and result fields, so
+   update the core models first. New required fields or changed semantics
+   require a new version.
 3. Breaking changes require a new event type (`*.v2`), a dual-publish window,
    and an explicit handoff between producers and consumers.
 4. Never reuse an event type or field name with different meaning.

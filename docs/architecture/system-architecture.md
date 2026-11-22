@@ -82,7 +82,7 @@ flowchart LR
     end
 
     subgraph NotificationService[notification-service]
-        Notif[Devices, preferences,\nExpo/FCM/WhatsApp delivery,\nretries + status]
+        Notif[Devices, preferences,\nFCM/WhatsApp delivery,\nretries + status]
     end
 
     subgraph Data
@@ -94,8 +94,8 @@ flowchart LR
     subgraph External
         SupabaseAuth[Supabase Auth\nemail + phone OTP]
         SLBFE[SLBFE agency source]
-        LLM[LLM providers]
-        Push[Expo Push / FCM / APNs]
+        LLM[Gemini API\nLLM + vision + audio]
+        Push[Firebase Cloud Messaging]
         Meta[WhatsApp Cloud API]
         SMS[SMS provider]
     end
@@ -151,7 +151,7 @@ flowchart LR
 | AI runtime | `ai-service` | LangGraph, OCR/extraction, LLM, speech, chat sessions, traces |
 | Delivery runtime | `notification-service` | Device tokens, preferences, channel delivery, retries, status |
 | Data | Postgres, Storage, Redis | Durable state, blobs, streams/queues |
-| External providers | Supabase Auth, SLBFE, LLM, Expo/FCM/APNs, WhatsApp, SMS | Identity, source data, intelligence, delivery |
+| External providers | Supabase Auth, SLBFE, Gemini, FCM, WhatsApp, SMS | Identity, source data, intelligence, delivery |
 
 Each layer only depends on contracts from the layer below it. Public DTOs do not
 leak database rows or another service's models.
@@ -164,8 +164,8 @@ leak database rows or another service's models.
 |---|---|---|---|---|
 | `core-api` | FastAPI/uvicorn | **Yes** via Kong | `core` schema, `documents` bucket metadata, public API, admin API | Postgres, Redis, Supabase Auth/Storage, ai-service, notification-service |
 | `core-api-worker` | Same image, different command | No | Background processing only | Postgres, Redis, AI/notification clients |
-| `ai-service` | FastAPI + LangGraph | No | `ai` schema: runs, traces, OCR text, chat, checkpoints | Postgres, Redis, LLM providers, core-api document bytes |
-| `notification-service` | FastAPI worker | No | `notification` schema: tokens, preferences, deliveries, attempts | Postgres, Redis, Expo/FCM/APNs, WhatsApp, SMS |
+| `ai-service` (planned) | FastAPI + LangGraph | No | `ai` schema: runs, traces, OCR text, chat, checkpoints, rules, fingerprints | Postgres, Redis, Gemini, core-api document bytes |
+| `notification-service` (planned) | FastAPI worker | No | `notification` schema: tokens, preferences, deliveries, attempts | Postgres, Redis, FCM, WhatsApp, SMS |
 | Kong | Kong OSS, DB-less | Edge | Routing, CORS, rate/size limits | core-api |
 | Supabase | CLI local / managed production | Infrastructure | Postgres, Auth, Storage | — |
 | Redis | Redis 7 | Infrastructure | Streams, event backlog, dead letters, lightweight rate limits | — |
@@ -240,12 +240,16 @@ sequenceDiagram
 The verification state machine is
 `pending → processing → verified | suspicious | fraudulent | failed`.
 Results are written only from a valid prior state, which makes duplicate or
-late events harmless. Stale `processing` records are re-queued by the worker
-after a timeout.
+late events harmless. Core never sets `processing` today, so the worker
+re-queues verifications stuck in `pending` or `processing` past
+`STALE_PROCESSING_MINUTES` (new `event_id`, same `verification_id`), and marks
+them `failed` (`analysis_timeout`) after `MAX_VERIFICATION_RETRIES`. A
+high-risk AI verdict does not open a case yet (change request CR-8).
 
 ### 6.4 Check-ins and escalation
 
-1. Worker creates a journey and grants check-in consent.
+1. Worker creates a journey and grants check-in consent. Revoking consent stops
+   further check-ins and missed-check-in escalation.
 2. `core-api` schedules Day 7/30/90 check-ins from the departure date.
 3. The scheduler worker finds due check-ins with `FOR UPDATE SKIP LOCKED`, marks
    them sent, creates a feed item, and emits `notification.requested.v1`.
@@ -269,8 +273,10 @@ after a timeout.
 ### 6.6 Chat and speech
 
 1. Client calls `core-api /api/v1/chat/*`.
-2. `core-api` authenticates, rate-limits, and proxies to `ai-service` internal
-   endpoints with a service JWT and correlation IDs.
+2. `core-api` authenticates, checks that any `attachments` are the caller's own
+   documents, and proxies to `ai-service` internal endpoints with a service JWT
+   and correlation IDs. Only Kong's global rate limit applies; per-user chat
+   quotas belong to `ai-service`.
 3. Chat messages stream back as SSE; core does not persist chat content.
 4. Speech uploads are validated for size/type before transcription; synthesized
    audio is streamed/returned without exposing `ai-service`.
@@ -282,7 +288,9 @@ after a timeout.
 2. `core-api` verifies the `X-Hub-Signature-256` HMAC when a secret is configured.
 3. Provider message IDs are deduped in `core.event_dedupe`.
 4. The verified payload is forwarded to `ai-service` with a service JWT.
-5. The webhook always returns quickly; AI processing/chat continues internally.
+5. Core waits for `ai-service` to accept the forward (30 s timeout) and returns
+   any upstream error to Meta, which then retries. `ai-service` must therefore
+   acknowledge with 2xx immediately and process the message asynchronously.
 
 ---
 
@@ -395,8 +403,8 @@ Timeouts and error mapping are centralized in
 | Data | Postgres, Redis, Storage | No public ports |
 | External | Supabase Auth, providers | Outbound over HTTPS |
 
-Only Kong publishes a host port. The current Compose file publishes Kong and the
-two frontend dev servers; Supabase runs outside Compose via the CLI.
+Only Kong publishes a host port. Compose runs Kong, `core-api`,
+`core-api-worker` and Redis; Supabase runs outside Compose via the CLI.
 
 ### 9.2 Authentication and authorization
 
@@ -404,12 +412,19 @@ two frontend dev servers; Supabase runs outside Compose via the CLI.
   audience, and (when configured) issuer.
 - **Roles:** `worker`, `caseworker`, `admin` live in `core.users`, not in the
   token.
-- **Internal identity:** short-lived HS256 service JWTs (`≤ 300s`) with `iss`,
-  `aud`, `sub`, `exp`; internal routes reject public tokens by audience and key.
+- **Internal identity:** short-lived HS256 service JWTs with `iss`, `aud`, `sub`,
+  `iat`, `exp`; tokens living longer than 300 s are rejected, and the
+  document-content, agency-history and verification-context routes accept only
+  `iss=ai-service`. One shared secret is used today; per-peer secrets are on
+  Person 1's backlog before `notification-service` ships.
 - **Ownership checks:** every worker-owned read/write verifies the row owner or
   staff role in the service layer.
-- **RLS:** defense-in-depth for direct Supabase access; the backend role is
-  trusted and enforces policy in application code.
+- **RLS:** defence in depth for direct Supabase access. Workers can read their
+  own rows; writes to verifications, documents, journeys, check-ins, complaints
+  and storage objects go only through `core-api` (migration `011`).
+- **Environment:** `ENVIRONMENT` defaults to `production`. Dev OTP, dev tokens,
+  unsigned webhooks and the local Supabase JWT secret work only in
+  `development`/`test`; startup fails if they are configured elsewhere.
 - **Privilege protection:** a database trigger blocks `role`/`is_active` changes
   from non-backend roles.
 
@@ -417,10 +432,12 @@ two frontend dev servers; Supabase runs outside Compose via the CLI.
 
 - Kong rate limits (600/min) and a 30 MB request cap; application upload cap is
   25 MB.
-- OTP requests are rate-limited by IP and phone in Redis.
+- OTP request/verify and login are rate-limited by IP (Kong's last
+  `X-Forwarded-For` hop) and by hashed phone/email in Redis. OTP limits fail
+  closed when Redis is unavailable.
 - Files are checked by magic bytes, extension, declared MIME, size, and PDF page
   count; duplicate SHA-256 uploads are rejected.
-- WhatsApp webhooks require a valid HMAC signature in production.
+- WhatsApp webhooks require a valid HMAC signature outside development/test.
 - SQL is explicit and parameterized; dynamic sort columns come from allow-lists.
 - Idempotency keys prevent duplicate verifications, uploads, check-ins, and
   complaints.
@@ -480,7 +497,8 @@ flowchart TB
 4. Seed/import reference data (SLBFE import, demo seed).
 5. Start `core-api`, then `core-api-worker`.
 6. Start internal services; add them to the network and health checks.
-7. Point Kong at `core-api`; verify `/health` and `/ready`.
+7. Point Kong at `core-api`; verify `/health` through Kong and `/ready` from
+   inside the network (Kong does not route `/ready`).
 
 `/health` is liveness. `/ready` checks Postgres, Redis, and storage, and reports
 internal-client status; it returns `503` if a critical dependency is unavailable.
@@ -499,7 +517,7 @@ internal-client status; it returns `503` if a critical dependency is unavailable
 | Duplicate event | Double side effects | `event_dedupe` in the same transaction |
 | Duplicate client retry | Duplicate records | DB idempotency keys + stored responses |
 | Missed check-in | Worker at risk, no response | Grace period, `missed` state, tier-2 case, staff notification |
-| Stale `processing` verification | Worker waits forever | Worker requeues after timeout, bounded retries |
+| Stale `pending`/`processing` verification | Worker waits forever | Worker requeues after timeout; `failed` after the retry cap |
 | Webhook replay | Duplicate AI messages | Provider message ID dedupe |
 | Chat disconnect | Broken stream | SSE proxy propagates disconnects, upstream context closes |
 | Oversized/malicious upload | Cost/storage abuse | Kong + app limits, magic-byte validation, duplicate rejection |
@@ -600,8 +618,9 @@ at-least-once delivery, idempotent consumers, and compensating state changes.
 | Complaints/cases/admin APIs | ✅ Implemented |
 | Admin portal | ✅ Pages implemented; Playwright E2E pending |
 | Chat/speech/WhatsApp proxies | ✅ Implemented against the frozen internal contract |
-| `ai-service` | ⏸️ Person 2 |
-| `notification-service` | ⏸️ Placeholder |
+| `ai-service` | ⏸️ Person 2 (contract in `docs/ai-agents/multi-agent-spec.md`) |
+| `notification-service` | ⏸️ Placeholder (Person 1) |
+| Worker web portal | ⏸️ Vite scaffold (Person 3) |
 | Local/full Compose + Supabase + stubs | 🚧 Partially verified |
 | Production deployment | ⏸️ Not yet |
 
@@ -623,7 +642,7 @@ actions.
    attempts, and audit based on legal/operational requirements.
 6. **Add OpenTelemetry + metrics** and alerting on queue lag, verification age,
    and delivery failure rate.
-7. **Harden provider integrations** with real SMS/WhatsApp/Expo credentials and
+7. **Harden provider integrations** with real SMS/WhatsApp/FCM credentials and
    delivery receipts.
 8. **Add a document malware scan** before AI processing if untrusted uploads
    grow.

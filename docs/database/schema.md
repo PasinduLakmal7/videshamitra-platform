@@ -39,12 +39,17 @@ VideshaMitra uses **one schema per service**. Services never join across schemas
 - `chat_sessions`: Worker AI chat sessions
 - `chat_messages`: Chat messages and citations
 - `checkpoints`: LangGraph checkpointer state
+- `fee_rules`, `wage_floors`, `red_flag_rules`: configurable verification rules (no code change when SLBFE rules change)
+- `scam_fingerprints`: HMAC-hashed phone, bank and WhatsApp identifiers linking re-branded scams
+- `event_dedupe`: Consumer idempotency by `event_id`
+
+The `ai` schema is planned; it lands with `ai-service` (Person 2).
 
 `ai-service` fetches document bytes from `core-api`'s internal endpoint. It never reads `core.documents`.
 
 ## `notification` schema — `notification-service`
 
-- `device_tokens`: Expo/FCM/APNs tokens, platform, app version, last seen
+- `device_tokens`: FCM registration tokens, platform, app version, last seen
 - `notification_preferences`: Channel opt-in and quiet hours
 - `deliveries`: Delivery request per notification/channel
 - `delivery_attempts`: Retry history, provider message IDs, errors
@@ -67,4 +72,5 @@ VideshaMitra uses **one schema per service**. Services never join across schemas
 - Device tokens and preferences live in `notification-service`; mobile clients register through `core-api`.
 - In-app notification read state lives in `core.notifications`.
 - Mobile uploads are compressed client-side and validated server-side.
-- Worker-owned core tables are protected by RLS; mobile clients use the anon key plus a Supabase JWT, never the service-role key.
+- Mobile and web clients call only `core-api`; they never use the service-role key.
+- RLS is defence in depth: workers can read their own rows, but direct writes are limited to their own profile (role/status protected by trigger), consents and notification read state. Migration `011` removed direct worker writes on verifications, documents, journeys, check-ins, complaints and storage objects; those go through `core-api`.
