@@ -215,7 +215,7 @@ class VerificationRepository:
             reviewed_by,
         )
 
-    async def stale_processing(
+    async def stale_in_flight(
         self, conn: asyncpg.Connection, *, minutes: int, limit: int = 50
     ) -> list[asyncpg.Record]:
         cutoff = datetime.now(UTC) - timedelta(minutes=minutes)
@@ -223,7 +223,7 @@ class VerificationRepository:
             await conn.fetch(
                 """
                 select * from core.verifications
-                where status = 'processing' and updated_at < $1
+                where status in ('pending', 'processing') and updated_at < $1
                 order by updated_at
                 limit $2
                 """,

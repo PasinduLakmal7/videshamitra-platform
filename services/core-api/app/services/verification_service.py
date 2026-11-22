@@ -501,9 +501,28 @@ class VerificationService:
         )
 
     async def recover_stale(self, conn: asyncpg.Connection) -> int:
-        stale = await self.repo.stale_processing(conn, minutes=settings.STALE_PROCESSING_MINUTES)
+        stale = await self.repo.stale_in_flight(conn, minutes=settings.STALE_PROCESSING_MINUTES)
         recovered = 0
         for row in stale:
+            if row["retry_count"] >= settings.MAX_VERIFICATION_RETRIES:
+                async with conn.transaction():
+                    failed = await self.repo.apply_failure(
+                        conn,
+                        verification_id=row["id"],
+                        error_code="analysis_timeout",
+                        message="The analysis did not finish in time. Please retry.",
+                    )
+                    if failed is not None:
+                        await self.audit.record(
+                            conn,
+                            actor=None,
+                            action="verification.stale_failed",
+                            entity_type="verification",
+                            entity_id=row["id"],
+                            metadata={"retry_count": row["retry_count"]},
+                            actor_service="core-api-worker",
+                        )
+                continue
             async with conn.transaction():
                 updated = await self.repo.mark_retry(conn, row["id"])
                 if updated is None:
