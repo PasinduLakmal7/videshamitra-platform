@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "NotificationRequestedData": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "channels": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Channels",
+          "type": "array"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "deep_link": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deep Link"
+        },
+        "locale": {
+          "default": "en",
+          "title": "Locale",
+          "type": "string"
+        },
+        "notification_id": {
+          "format": "uuid",
+          "title": "Notification Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "user_id": {
+          "format": "uuid",
+          "title": "User Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "notification_id",
+        "user_id",
+        "type",
+        "title",
+        "body"
+      ],
+      "title": "NotificationRequestedData",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/NotificationRequestedData"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "notification.requested",
+      "default": "notification.requested",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "trace_id": {
+      "format": "uuid",
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "data"
+  ],
+  "title": "notification.requested.v1",
+  "type": "object"
+}

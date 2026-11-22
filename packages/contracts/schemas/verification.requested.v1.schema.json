@@ -1,0 +1,272 @@
+{
+  "$defs": {
+    "AgencyRef": {
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "license_expires_on": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License Expires On"
+        },
+        "license_no": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "License No"
+        },
+        "license_status": {
+          "default": "unknown",
+          "title": "License Status",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "registration_no": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Registration No"
+        }
+      },
+      "title": "AgencyRef",
+      "type": "object"
+    },
+    "DocumentRef": {
+      "properties": {
+        "document_id": {
+          "format": "uuid",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "mime_type": {
+          "title": "Mime Type",
+          "type": "string"
+        },
+        "page_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page Count"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "type",
+        "mime_type"
+      ],
+      "title": "DocumentRef",
+      "type": "object"
+    },
+    "JobDetails": {
+      "properties": {
+        "currency": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "destination_country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Destination Country"
+        },
+        "employer_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Employer Name"
+        },
+        "offered_salary": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offered Salary"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        }
+      },
+      "title": "JobDetails",
+      "type": "object"
+    },
+    "VerificationRequestedData": {
+      "additionalProperties": false,
+      "properties": {
+        "agency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgencyRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "documents": {
+          "items": {
+            "$ref": "#/$defs/DocumentRef"
+          },
+          "title": "Documents",
+          "type": "array"
+        },
+        "job": {
+          "$ref": "#/$defs/JobDetails"
+        },
+        "locale": {
+          "default": "en",
+          "title": "Locale",
+          "type": "string"
+        },
+        "user_id": {
+          "format": "uuid",
+          "title": "User Id",
+          "type": "string"
+        },
+        "verification_id": {
+          "format": "uuid",
+          "title": "Verification Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "verification_id",
+        "user_id",
+        "job"
+      ],
+      "title": "VerificationRequestedData",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/VerificationRequestedData"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "verification.requested",
+      "default": "verification.requested",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "trace_id": {
+      "format": "uuid",
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "data"
+  ],
+  "title": "verification.requested.v1",
+  "type": "object"
+}

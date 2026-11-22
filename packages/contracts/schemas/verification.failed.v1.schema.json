@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "VerificationFailedData": {
+      "additionalProperties": false,
+      "properties": {
+        "error_code": {
+          "title": "Error Code",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "verification_id": {
+          "format": "uuid",
+          "title": "Verification Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "verification_id",
+        "error_code",
+        "message"
+      ],
+      "title": "VerificationFailedData",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/VerificationFailedData"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "verification.failed",
+      "default": "verification.failed",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "occurred_at": {
+      "format": "date-time",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "producer": {
+      "title": "Producer",
+      "type": "string"
+    },
+    "trace_id": {
+      "format": "uuid",
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_id",
+    "occurred_at",
+    "producer",
+    "trace_id",
+    "data"
+  ],
+  "title": "verification.failed.v1",
+  "type": "object"
+}

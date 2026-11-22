@@ -1,0 +1,16 @@
+{
+  "events": [
+    "notification.requested",
+    "verification.completed",
+    "verification.failed",
+    "verification.requested"
+  ],
+  "files": [
+    "envelope.schema.json",
+    "notification.requested.v1.schema.json",
+    "verification.completed.v1.schema.json",
+    "verification.failed.v1.schema.json",
+    "verification.requested.v1.schema.json"
+  ],
+  "version": 1
+}
