@@ -8,3 +8,14 @@ port = 54322
 
 [studio]
 port = 54323
+
+[auth]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = false

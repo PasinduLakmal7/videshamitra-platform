@@ -1,5 +1,10 @@
--- VideshaMitra Seed Data
--- Demo recruitment agencies, verification entries, and initial lookup data.
-
--- Enable pg_trgm extension for fuzzy agency-name matching
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- VideshaMitra demo seed
+--
+-- The core schema is owned by services/core-api. Apply it with:
+--
+--   cd services/core-api
+--   python -m app.db.migrate
+--   python scripts/seed_demo_data.py
+--
+-- This file intentionally contains no core data so the Supabase CLI does not
+-- create a second source of truth for migrations or fixtures.
