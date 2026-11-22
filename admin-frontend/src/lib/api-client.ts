@@ -19,7 +19,7 @@ export class ApiError extends Error {
 
 export function getSession(): Session | null {
   try {
-    const raw = localStorage.getItem(SESSION_KEY);
+    const raw = sessionStorage.getItem(SESSION_KEY);
     return raw ? (JSON.parse(raw) as Session) : null;
   } catch {
     return null;
@@ -27,7 +27,7 @@ export function getSession(): Session | null {
 }
 
 export function setSession(session: Session): void {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
 export function updateSessionTokens(tokens: Partial<Session>): void {
@@ -37,7 +37,7 @@ export function updateSessionTokens(tokens: Partial<Session>): void {
 }
 
 export function clearSession(): void {
-  localStorage.removeItem(SESSION_KEY);
+  sessionStorage.removeItem(SESSION_KEY);
   window.dispatchEvent(new Event('vm:session-cleared'));
 }
 

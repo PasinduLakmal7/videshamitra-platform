@@ -37,7 +37,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const session = getSession();
         if (session) setSession({ ...session, user: profile });
       })
-      .catch(() => {
+      .catch((err) => {
+        if (err instanceof ApiError && (err.status === 401 || err.status === 403)) clearSession();
         if (active) setUser(null);
       })
       .finally(() => {

@@ -46,7 +46,6 @@ export const AgenciesPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   const [importOpen, setImportOpen] = useState(false);
-  const [source, setSource] = useState('');
   const [snapshotDate, setSnapshotDate] = useState('');
   const [dryRun, setDryRun] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -119,7 +118,6 @@ export const AgenciesPage: React.FC = () => {
     setImportResult(null);
     try {
       const result = await api.post<ImportResult>('/agencies/import', {
-        source: source || null,
         snapshot_date: snapshotDate || null,
         dry_run: dryRun,
       });
@@ -332,13 +330,7 @@ export const AgenciesPage: React.FC = () => {
         }
       >
         <form className="stack-sm" onSubmit={runImport}>
-          <Input
-            label="Source"
-            name="source"
-            value={source}
-            placeholder="URL or local path (blank uses SLBFE_SOURCE_URL)"
-            onChange={(event) => setSource(event.target.value)}
-          />
+          <p className="muted">Imports from the server-configured SLBFE source.</p>
           <Input
             label="Snapshot date"
             name="snapshot_date"
