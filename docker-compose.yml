@@ -1,5 +1,95 @@
+# Docker Compose — core platform (local)
+#
+# Local Supabase (Postgres/Auth/Storage) runs outside Compose via the Supabase
+# CLI on ports 54321/54322. Compose runs core-api, its worker, Redis and Kong.
+#
+# ai-service and notification-service are internal deployables owned by
+# Person 2 / the notification workstream. Add them to the `internal` network
+# when their scaffolds land; they must not publish host ports.
+#
+#   supabase start
+#   psql "postgresql://postgres:postgres@localhost:54322/postgres" -f supabase/bootstrap.sql
+#   services/core-api/.venv/bin/python -m app.db.migrate
+#   docker compose up --build
+#
+# Kong is the only published entry point (http://localhost:8000).
+
 services:
-  # Kong API Gateway (DB-less mode)
+  redis:
+    image: redis:7-alpine
+    container_name: videshamitra-redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+    restart: unless-stopped
+
+  core-api:
+    build:
+      context: ./services/core-api
+      dockerfile: Dockerfile
+    container_name: videshamitra-core-api
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://host.docker.internal:54321}
+      REDIS_URL: redis://redis:6379/0
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8010}
+      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:8020}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - edge
+      - internal
+
+  core-api-worker:
+    build:
+      context: ./services/core-api
+      dockerfile: Dockerfile
+    container_name: videshamitra-core-api-worker
+    command: ["python", "-m", "app.workers.runner"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://host.docker.internal:54321}
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_healthy
+      core-api:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+
   kong:
     image: kong:3.9
     container_name: videshamitra-kong
@@ -8,67 +98,24 @@ services:
       KONG_DECLARATIVE_CONFIG: /kong/kong.yml
       KONG_PROXY_LISTEN: 0.0.0.0:8000
       KONG_ADMIN_LISTEN: "off"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
     volumes:
       - ./infra/kong/kong.yml:/kong/kong.yml:ro
     ports:
       - "8000:8000"
     depends_on:
-      - web-backend
+      core-api:
+        condition: service_healthy
     networks:
-      - videshamitra-net
+      - edge
+    restart: unless-stopped
 
-  # FastAPI Backend Service (Internal to Docker network)
-  web-backend:
-    build:
-      context: ./web-backend
-      dockerfile: Dockerfile
-    container_name: videshamitra-backend
-    expose:
-      - "8000"
-    environment:
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@localhost:54322/postgres}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - CORS_ORIGINS=["http://localhost:5173","http://localhost:5174"]
-    volumes:
-      - ./web-backend:/app
-    networks:
-      - videshamitra-net
-
-  # Worker Portal (React + Vite)
-  web-frontend:
-    build:
-      context: ./web-frontend
-      dockerfile: Dockerfile
-    container_name: videshamitra-web-frontend
-    ports:
-      - "5173:5173"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8000/api/v1
-    volumes:
-      - ./web-frontend:/app
-      - /app/node_modules
-    networks:
-      - videshamitra-net
-
-  # Caseworker Admin Dashboard (React + Vite)
-  admin-frontend:
-    build:
-      context: ./admin-frontend
-      dockerfile: Dockerfile
-    container_name: videshamitra-admin-frontend
-    ports:
-      - "5174:5174"
-    environment:
-      - VITE_API_BASE_URL=http://localhost:8000/api/v1
-    volumes:
-      - ./admin-frontend:/app
-      - /app/node_modules
-    networks:
-      - videshamitra-net
+volumes:
+  redis-data:
 
 networks:
-  videshamitra-net:
+  edge:
+    driver: bridge
+  internal:
     driver: bridge

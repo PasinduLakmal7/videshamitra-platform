@@ -1,22 +1,38 @@
 _format_version: "3.0"
 
 services:
-  - name: videshamitra-backend
-    url: http://web-backend:8000
+  - name: core-api
+    url: http://core-api:8000
+    connect_timeout: 5000
+    read_timeout: 60000
+    write_timeout: 60000
     routes:
-      - name: backend-api
+      - name: core-api-v1
         paths:
           - /api/v1
         strip_path: false
-      - name: backend-health
+        protocols:
+          - http
+          - https
+      - name: core-api-health
         paths:
           - /health
         strip_path: false
+        protocols:
+          - http
+          - https
     plugins:
       - name: rate-limiting
         config:
-          minute: 120
+          minute: 600
+          hour: 20000
           policy: local
+          fault_tolerant: true
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 30
+          size_unit: megabytes
+          require_content_length: false
       - name: cors
         config:
           origins:
@@ -33,4 +49,11 @@ services:
             - Accept
             - Authorization
             - Content-Type
+            - Idempotency-Key
+            - X-Request-ID
+            - X-Trace-ID
+          exposed_headers:
+            - X-Request-ID
+            - X-Trace-ID
+          credentials: true
           max_age: 3600

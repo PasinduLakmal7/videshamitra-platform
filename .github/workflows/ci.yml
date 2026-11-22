@@ -1,43 +1,131 @@
-name: CI Pipeline
+name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.12"
 
 jobs:
-  backend-test:
+  core-api:
+    name: core-api lint, tests, contracts
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/core-api
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/core-api/requirements.txt
+
       - name: Install dependencies
-        working-directory: ./web-backend
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Run tests
-        working-directory: ./web-backend
-        run: |
-          pytest || echo "No tests yet"
+          pip install pytest pytest-asyncio pytest-cov ruff
 
-  frontend-lint:
+      - name: Lint
+        run: ruff check app scripts tests
+
+      - name: Format check
+        run: ruff format --check app scripts tests
+
+      - name: Unit and contract tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          INTERNAL_JWT_SECRET: ci-internal-secret-at-least-32-characters
+        run: pytest -q --cov=app --cov-report=term-missing
+
+      - name: OpenAPI contract is current
+        run: python scripts/export_openapi.py --check
+
+      - name: Event schemas are current
+        run: python scripts/export_contracts.py --check
+
+  migrations:
+    name: migrations from empty Postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: videshamitra_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: services/core-api/requirements.txt
+      - name: Install dependencies
+        working-directory: services/core-api
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio
+      - name: Bootstrap schema and roles
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/videshamitra_test" \
+            -f supabase/bootstrap.sql
+      - name: Apply migrations
+        working-directory: services/core-api
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/videshamitra_test
+          INTERNAL_JWT_SECRET: ci-internal-secret-at-least-32-characters
+        run: |
+          python -m app.db.migrate
+          python -m app.db.migrate
+      - name: Migration integration test
+        working-directory: services/core-api
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/videshamitra_test
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/videshamitra_test
+          INTERNAL_JWT_SECRET: ci-internal-secret-at-least-32-characters
+        run: pytest -q tests/integration
+
+  docker:
+    name: docker build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Build core-api image
+        run: docker build services/core-api
+
+  frontends:
+    name: admin + worker web lint/build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - name: Check web-frontend
-        working-directory: ./web-frontend
+          node-version: 22
+      - name: Admin frontend
+        working-directory: admin-frontend
         run: |
-          npm ci || npm install
-      - name: Check admin-frontend
-        working-directory: ./admin-frontend
+          npm ci
+          npm run lint
+          npm run typecheck
+          npm run build
+          npm run generate:api
+          git diff --exit-code -- src/types/api.generated.ts
+      - name: Worker web
+        working-directory: web-frontend
         run: |
-          npm ci || npm install
+          npm ci
+          npm run build
