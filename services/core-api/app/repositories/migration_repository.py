@@ -331,6 +331,7 @@ class MigrationRepository:
                 join core.migration_journeys j on j.id = c.journey_id
                 join core.users u on u.id = c.user_id
                 where c.status = 'scheduled' and c.due_at <= now()
+                  and j.consent_checkins
                 order by c.due_at
                 limit $1
                 for update of c skip locked
@@ -351,6 +352,7 @@ class MigrationRepository:
                 join core.users u on u.id = c.user_id
                 where c.status in ('scheduled', 'sent')
                   and c.due_at <= now() - make_interval(hours => $1)
+                  and j.consent_checkins
                 order by c.due_at
                 limit $2
                 for update of c skip locked
