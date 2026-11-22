@@ -129,7 +129,6 @@ class AgencyService:
         conn: asyncpg.Connection,
         *,
         actor: CurrentUser,
-        source: str | None,
         snapshot_date: date | None,
         dry_run: bool,
         request: RequestInfo,
@@ -138,7 +137,6 @@ class AgencyService:
             async with conn.transaction():
                 summary = await self.importer.import_from_source(
                     conn,
-                    source=source,
                     snapshot_date=snapshot_date,
                     imported_by=actor.id,
                     dry_run=dry_run,

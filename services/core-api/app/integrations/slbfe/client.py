@@ -41,14 +41,14 @@ async def fetch_source(source: str | None = None, *, api_key: str | None = None)
         )
 
     headers = {}
-    key = api_key or settings.SLBFE_API_KEY
+    key = api_key or (settings.SLBFE_API_KEY if source == settings.SLBFE_SOURCE_URL else "")
     if key:
         headers["Authorization"] = f"Bearer {key}"
 
     last_error: Exception | None = None
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=60.0, follow_redirects=False) as client:
                 response = await client.get(source, headers=headers)
                 response.raise_for_status()
                 return FetchedPayload(
