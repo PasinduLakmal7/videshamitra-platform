@@ -49,6 +49,19 @@ class DocumentRepository:
             metadata,
         )
 
+    async def owned_ids(
+        self, conn: asyncpg.Connection, *, user_id: UUID, document_ids: list[UUID]
+    ) -> set[UUID]:
+        rows = await conn.fetch(
+            """
+            select id from core.documents
+            where id = any($1::uuid[]) and user_id = $2 and deleted_at is null
+            """,
+            document_ids,
+            user_id,
+        )
+        return {row["id"] for row in rows}
+
     async def get(
         self,
         conn: asyncpg.Connection,
