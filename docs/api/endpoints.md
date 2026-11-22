@@ -52,14 +52,18 @@ Prefix: `/api/v1`
 
 ### `core-api` (called by `ai-service` / infrastructure)
 
-- `GET /internal/v1/documents/{id}/content` — bytes or signed URL (audited)
-- `GET /internal/v1/agencies/{id}/license-history`
-- `GET /internal/v1/verifications/{id}` — job context outside the event
+- `GET /internal/v1/documents/{id}/content` — raw bytes (audited; `ai-service` tokens only)
+- `GET /internal/v1/agencies/{id}/license-history` — `ai-service` tokens only
+- `GET /internal/v1/verifications/{id}` — job context outside the event; `ai-service` tokens only
 - `POST /internal/v1/audit-events` — optional audit forwarding
 - `GET /internal/v1/health`
 
-All internal calls require a short-lived service JWT with the correct audience.
-Public Supabase tokens are rejected on these routes.
+All internal calls require a short-lived service JWT (HS256, `iat` and `exp`
+required, lifetime ≤ 300 s) with the correct audience. Public Supabase tokens are
+rejected on these routes. The full ai-service contract is in
+[`docs/ai-agents/multi-agent-spec.md`](../ai-agents/multi-agent-spec.md).
+
+`ai-service` must also serve `GET /internal/v1/health`; core's `/ready` probes it.
 
 ## Event contracts
 
@@ -84,7 +88,7 @@ implementations are separate deployables.
 
 ## Mobile client contract
 
-- `POST /notifications/devices` — register/unregister an Expo/FCM/APNs push token; `core-api` proxies to `notification-service`
-- `POST /chat/sessions/{id}/messages` — send a message and receive an SSE stream proxied through `core-api`
+- `POST /notifications/devices` — register an FCM push token; `DELETE /notifications/devices/{token}` unregisters it on logout; `core-api` proxies both to `notification-service`
+- `POST /chat/sessions/{id}/messages` — send a message and receive an SSE stream proxied through `core-api`; `attachments` are document UUIDs owned by the caller
 - `POST /documents` — multipart upload from camera/document picker, with size and MIME limits
 - `Idempotency-Key` header — required on queued `POST` requests to `/checkins/{id}/respond`, `/complaints`, `/verification`, and `/documents`

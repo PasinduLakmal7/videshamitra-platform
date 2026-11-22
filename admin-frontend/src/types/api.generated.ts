@@ -1153,7 +1153,10 @@ export interface components {
             /** Registration No */
             registration_no: string;
         };
-        /** AgencyImportRequest */
+        /**
+         * AgencyImportRequest
+         * @description Imports from the configured SLBFE_SOURCE_URL; ad-hoc sources use the CLI.
+         */
         AgencyImportRequest: {
             /**
              * Dry Run
@@ -1162,11 +1165,6 @@ export interface components {
             dry_run: boolean;
             /** Snapshot Date */
             snapshot_date?: string | null;
-            /**
-             * Source
-             * @description URL or local path; defaults to SLBFE_SOURCE_URL
-             */
-            source?: string | null;
         };
         /**
          * AgencyLicenseStatus

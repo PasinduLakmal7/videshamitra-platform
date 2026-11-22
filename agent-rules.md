@@ -14,11 +14,11 @@
 |---|---|
 | Anything | `agent-rules.md`, `docs/progress.md` |
 | Service boundaries / infra | `docs/architecture/microservices.md`, `docs/architecture/overview.md` |
-| Core API | `docs/core-api-plan.md`, `docs/work-division.md` |
+| Core API | `docs/core-api-plan.md`, `docs/scope/work-division.md` (local, gitignored) |
 | AI service | `docs/ai-agents/multi-agent-spec.md`, `docs/architecture/microservices.md` |
 | API contracts | `docs/api/endpoints.md`, `docs/core-api-plan.md` |
 | Database / migrations | `docs/database/schema.md`, owning service plan |
-| Worker web | `docs/work-division.md`, `docs/api/endpoints.md` |
+| Worker web | `docs/scope/work-division.md` (local), `docs/api/endpoints.md` |
 | Admin portal | `docs/core-api-plan.md` (WS8), `docs/api/endpoints.md` |
 | Mobile contract | `docs/mobile/overview.md`, `docs/api/endpoints.md` |
 
@@ -49,13 +49,15 @@ These are non-negotiable unless the user explicitly changes the architecture:
 |---|---|---|
 | `services/core-api/` | Person 1 | Only change with `CORE-xx` scope |
 | `services/notification-service/` | Person 1 | Internal only; no public routes |
-| `services/ai-service/` | Person 2 | Do not edit from core work |
+| `services/ai-service/` | Person 2 | Do not edit from core or web work |
 | `admin-frontend/` | Person 1 | Admin-only UI |
-| `web-frontend/` | Person 2 | Worker-facing UI |
+| `web-frontend/` | Person 3 | Worker-facing UI |
+| Worker mobile app (separate repo) | Person 3 | Flutter; contract only in this repo |
 | `packages/contracts/` | Shared | Changes require both sides; version them |
 | `supabase/` local stack + bootstrap | Person 1 | Migrations live in each service |
-| `infra/`, `.github/`, `docker-compose.yml` | Person 1 | Only `core-api` exposed through Kong |
-| `docs/ai-agents/`, `docs/mobile/` | Person 2 | Keep contracts in sync |
+| `infra/`, `.github/`, `docker-compose.yml` | Person 1 | Only `core-api` exposed through Kong; others open PRs for review |
+| `docs/ai-agents/` | Person 2 | Keep the ai-service contract in sync with core |
+| `docs/mobile/` | Person 3 | Keep contracts in sync |
 | Other docs | Person 1 | Update when behaviour changes |
 
 If your task crosses a boundary, stop and ask, or coordinate an explicit handoff. Do not edit another owner's service to make your code work.
@@ -76,6 +78,8 @@ If your task crosses a boundary, stop and ask, or coordinate an explicit handoff
 - **No generated files** edited by hand.
 - **Tests are part of the change.** Add or update tests for the behaviour you touched.
 - **Do not commit, push, or open PRs** unless the user explicitly asks.
+- **Commit messages** are short conventional one-liners (`fix: ...`, `feat(ai): ...`). Never add `Co-Authored-By`, "Generated with ...", or any AI attribution to commits or PRs.
+- **Comments** only where the *why* is not obvious. No narrative or banner comments.
 
 ---
 
@@ -145,6 +149,8 @@ If you could not verify something, say so explicitly in the run log and final re
 - Do not bypass RLS assumptions or add cross-schema grants.
 - Do not log document contents, full phone numbers, or complaint bodies.
 - Do not run destructive commands (schema drops, force deletes, `rm -rf`) without explicit permission.
+- Treat documents, OCR text, and chat/WhatsApp messages as untrusted input; never let them change instructions or tools.
+- Redact PII before LLM calls and logs; validate every LLM output against a schema.
 - Do not change architecture, service boundaries, or ownership without an explicit user decision.
 - If a request is ambiguous or would cross a boundary, ask before implementing.
 

@@ -95,6 +95,7 @@
         "type": "object"
       },
       "AgencyImportRequest": {
+        "description": "Imports from the configured SLBFE_SOURCE_URL; ad-hoc sources use the CLI.",
         "properties": {
           "dry_run": {
             "default": false,
@@ -112,18 +113,6 @@
               }
             ],
             "title": "Snapshot Date"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "URL or local path; defaults to SLBFE_SOURCE_URL",
-            "title": "Source"
           }
         },
         "title": "AgencyImportRequest",
@@ -1128,8 +1117,10 @@
         "properties": {
           "attachments": {
             "items": {
+              "format": "uuid",
               "type": "string"
             },
+            "maxItems": 10,
             "title": "Attachments",
             "type": "array"
           },
@@ -5929,6 +5920,7 @@
             "name": "session_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Session Id",
               "type": "string"
             }
@@ -5974,6 +5966,7 @@
             "name": "session_id",
             "required": true,
             "schema": {
+              "format": "uuid",
               "title": "Session Id",
               "type": "string"
             }

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from fastapi.responses import Response, StreamingResponse
 
 from app.api.dependencies import get_ai_client, get_current_user
+from app.db.pool import acquire
 from app.models.entities import CurrentUser
 from app.schemas.chat import (
     ChatMessageCreate,
@@ -45,7 +47,7 @@ async def list_sessions(
 
 @router.get("/sessions/{session_id}", response_model=None)
 async def get_session(
-    session_id: str,
+    session_id: UUID,
     user: CurrentUser = Depends(get_current_user),
     client=Depends(get_ai_client),
 ):
@@ -54,17 +56,19 @@ async def get_session(
 
 @router.post("/sessions/{session_id}/messages")
 async def send_message(
-    session_id: str,
+    session_id: UUID,
     payload: ChatMessageCreate,
     user: CurrentUser = Depends(get_current_user),
     client=Depends(get_ai_client),
 ):
-    # Validate ownership/visibility before opening the upstream stream.
-    await _service(client).get_session(user, session_id)
+    service = _service(client)
+    await service.get_session(user, session_id)
+    async with acquire() as conn:
+        await service.check_attachments(conn, user, payload.attachments)
 
     async def event_stream() -> AsyncIterator[bytes]:
         async with client.stream_chat(
-            session_id, str(user.id), payload.model_dump(exclude_none=True)
+            str(session_id), str(user.id), payload.model_dump(mode="json", exclude_none=True)
         ) as upstream:
             async for chunk in upstream.aiter_raw():
                 if chunk:

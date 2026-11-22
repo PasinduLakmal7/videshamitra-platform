@@ -84,7 +84,6 @@ async def import_agencies(
     summary = await AgencyService().import_agencies(
         conn,
         actor=user,
-        source=payload.source,
         snapshot_date=payload.snapshot_date,
         dry_run=payload.dry_run,
         request=request_info,

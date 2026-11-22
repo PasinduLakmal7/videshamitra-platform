@@ -3,9 +3,9 @@
 # Local Supabase (Postgres/Auth/Storage) runs outside Compose via the Supabase
 # CLI on ports 54321/54322. Compose runs core-api, its worker, Redis and Kong.
 #
-# ai-service and notification-service are internal deployables owned by
-# Person 2 / the notification workstream. Add them to the `internal` network
-# when their scaffolds land; they must not publish host ports.
+# ai-service (Person 2) and notification-service (Person 1) join the
+# `internal` network when they land; they must not publish host ports.
+# Requires ENVIRONMENT and INTERNAL_JWT_SECRET in the root .env.
 #
 #   supabase start
 #   psql "postgresql://postgres:postgres@localhost:54322/postgres" -f supabase/bootstrap.sql
@@ -40,12 +40,13 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
-      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://host.docker.internal:54321}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_INTERNAL_URL: ${DOCKER_SUPABASE_INTERNAL_URL:-http://host.docker.internal:54321}
       REDIS_URL: redis://redis:6379/0
-      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai-service:8010}
-      NOTIFICATION_SERVICE_URL: ${NOTIFICATION_SERVICE_URL:-http://notification-service:8020}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      AI_SERVICE_URL: http://ai-service:8010
+      NOTIFICATION_SERVICE_URL: http://notification-service:8020
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET in .env (openssl rand -hex 32)}
+      ENVIRONMENT: ${ENVIRONMENT:?set ENVIRONMENT in .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -74,10 +75,13 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
-      SUPABASE_INTERNAL_URL: ${SUPABASE_INTERNAL_URL:-http://host.docker.internal:54321}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://postgres:postgres@host.docker.internal:54322/postgres}
+      SUPABASE_INTERNAL_URL: ${DOCKER_SUPABASE_INTERNAL_URL:-http://host.docker.internal:54321}
       REDIS_URL: redis://redis:6379/0
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      AI_SERVICE_URL: http://ai-service:8010
+      NOTIFICATION_SERVICE_URL: http://notification-service:8020
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET in .env (openssl rand -hex 32)}
+      ENVIRONMENT: ${ENVIRONMENT:?set ENVIRONMENT in .env}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -6,6 +6,7 @@ Public Supabase tokens are never accepted on internal routes: they carry the
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -17,6 +18,7 @@ from app.core.exceptions import Forbidden, Unauthorized
 from app.models.entities import ServiceIdentity
 
 ALGORITHM = "HS256"
+MAX_TOKEN_LIFETIME_SECONDS = 300
 
 
 def create_service_token(
@@ -25,7 +27,7 @@ def create_service_token(
     subject: str = "core-api",
     ttl_seconds: int | None = None,
 ) -> str:
-    ttl = min(ttl_seconds or settings.INTERNAL_JWT_TTL_SECONDS, 300)
+    ttl = min(ttl_seconds or settings.INTERNAL_JWT_TTL_SECONDS, MAX_TOKEN_LIFETIME_SECONDS)
     now = datetime.now(UTC)
     claims = {
         "iss": settings.INTERNAL_JWT_ISSUER,
@@ -52,7 +54,7 @@ def verify_service_token(
             algorithms=[ALGORITHM],
             audience=audience,
             leeway=5,
-            options={"require": ["iss", "aud", "sub", "exp"]},
+            options={"require": ["iss", "aud", "sub", "exp", "iat"]},
         )
     except jwt.ExpiredSignatureError as exc:
         raise Unauthorized("Service token expired", code="service_token_expired") from exc
@@ -61,6 +63,8 @@ def verify_service_token(
     except jwt.InvalidTokenError as exc:
         raise Unauthorized("Invalid service token", code="service_token_invalid") from exc
 
+    if int(claims["exp"]) - int(claims["iat"]) > MAX_TOKEN_LIFETIME_SECONDS:
+        raise Unauthorized("Service token lifetime too long", code="service_token_lifetime")
     if claims.get("iss") not in issuers:
         raise Forbidden("Service token issuer not allowed", code="service_token_issuer")
     return claims
@@ -77,3 +81,11 @@ def _bearer(request: Request) -> str:
 async def require_service(request: Request) -> ServiceIdentity:
     claims = verify_service_token(_bearer(request))
     return ServiceIdentity(service=str(claims.get("iss")), claims=claims)
+
+
+def require_service_from(*issuers: str) -> Callable[[Request], Awaitable[ServiceIdentity]]:
+    async def dependency(request: Request) -> ServiceIdentity:
+        claims = verify_service_token(_bearer(request), allowed_issuers=list(issuers))
+        return ServiceIdentity(service=str(claims.get("iss")), claims=claims)
+
+    return dependency

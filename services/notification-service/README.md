@@ -7,6 +7,8 @@ Planned responsibilities:
 
 - Owns the `notification` schema and `notification_service_role`.
 - Owns device tokens, preferences, quiet hours, delivery records and retries.
+- Sends push through Firebase Cloud Messaging (Android, and iOS via FCM's APNs
+  bridge) for the Flutter app, and WhatsApp template messages for proactive alerts.
 - Consumes `notification.requested.v1` from `vm:notifications:requests`.
 - Publishes optional `notification.delivery.updated.v1` to
   `vm:notifications:results`.

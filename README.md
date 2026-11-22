@@ -10,12 +10,12 @@ VideshaMitra is a trilingual (Sinhala, Tamil, English), agentic AI migration-saf
 
 | Platform | Primary users | Stack |
 |---|---|---|
-| Worker mobile app (separate repository) | **Migrant workers ("normal users")** — primary channel | React Native + Expo + TypeScript |
+| Worker mobile app (separate repository) | **Migrant workers ("normal users")** — primary channel | Flutter (Dart) + FCM |
 | `web-frontend/` | Migrant workers (browser access) | React + Vite + TypeScript |
 | `admin-frontend/` | SLBFE caseworkers & admins | React + Vite + TypeScript |
 | `services/core-api/` | All clients — public API | FastAPI + asyncpg + Redis |
-| `services/ai-service/` | Core API — internal | FastAPI + LangGraph |
-| `services/notification-service/` | Core API — internal | FastAPI + Expo/FCM/WhatsApp |
+| `services/ai-service/` (planned) | Core API — internal | FastAPI + LangGraph + Gemini |
+| `services/notification-service/` (planned) | Core API — internal | FastAPI + FCM/WhatsApp |
 
 The worker mobile app is the primary product for normal users. It is Android-first and built for low-connectivity environments, with:
 
@@ -36,8 +36,8 @@ The mobile app is worker-only; caseworker and admin workflows stay in `admin-fro
 videshamitra-platform/
 ├── services/
 │   ├── core-api/            # Public API, transactional core, admin APIs
-│   ├── ai-service/          # LangGraph, OCR, LLM, speech, traces
-│   └── notification-service/ # Device tokens, preferences, delivery
+│   ├── ai-service/          # (planned) LangGraph, OCR, LLM, speech, traces
+│   └── notification-service/ # (planned) Device tokens, preferences, delivery
 ├── packages/contracts/      # Versioned event + internal API contracts
 ├── admin-frontend/          # React + Vite + TS caseworker/admin interface
 ├── web-frontend/            # React + Vite + TS worker web application
@@ -63,7 +63,7 @@ supabase start
 psql "postgresql://postgres:postgres@localhost:54322/postgres" -f supabase/bootstrap.sql
 cd services/core-api
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"
-cp ../../.env.example ../../.env                  # fill in local Supabase keys
+cp ../../.env.example ../../.env                  # fill in Supabase keys + INTERNAL_JWT_SECRET (openssl rand -hex 32)
 .venv/bin/python -m app.db.migrate
 .venv/bin/python scripts/seed_demo_data.py
 .venv/bin/uvicorn app.main:app --reload --port 8000
@@ -80,8 +80,8 @@ bring up Kong + core + worker + Redis with `docker compose up --build`
 
 | Repository | Contents |
 |---|---|
-| **videshamitra-platform** (this repo) | Three services (`core-api`, `ai-service`, `notification-service`), worker web portal, admin portal, database, infrastructure, documentation |
-| **Worker mobile app** (separate repo) | React Native + Expo app for migrant workers (Android/iOS); consumes the same `/api/v1` API |
+| **videshamitra-platform** (this repo) | Three services (`core-api`; `ai-service` and `notification-service` planned), worker web portal, admin portal, database, infrastructure, documentation |
+| **Worker mobile app** (separate repo) | Flutter app for migrant workers (Android first, then iOS); consumes the same `/api/v1` API |
 
 ---
 
@@ -89,14 +89,14 @@ bring up Kong + core + worker + Redis with `docker compose up --build`
 
 The app source lives in a separate repository; this section documents scope and shared contracts.
 
-- **Framework:** React Native + Expo (TypeScript, Expo Router)
-- **State/data:** TanStack Query + Zustand
-- **Auth:** Supabase Auth with JWT stored in `expo-secure-store`
-- **Notifications:** Expo Notifications → FCM (Android) / APNs (iOS)
+- **Framework:** Flutter (Dart), `go_router` navigation
+- **State/data:** Riverpod + `dio` against the core `/api/v1` API
+- **Auth:** tokens from `core-api` `/auth/*`, stored in `flutter_secure_storage`
+- **Notifications:** Firebase Cloud Messaging (`firebase_messaging`; iOS through FCM's APNs bridge)
 - **Offline:** cached guidance, verification history, and queued submissions
 - **Media:** camera capture, document picker, voice recording/playback
-- **Localization:** Sinhala / Tamil / English with device-language detection
-- **Distribution:** EAS Build and EAS Submit (Android first, then iOS)
+- **Localization:** Sinhala / Tamil / English (`flutter_localizations` + ARB files)
+- **Distribution:** Play Store first, then App Store
 
 Full specification: [`docs/mobile/overview.md`](docs/mobile/overview.md)
 
@@ -106,11 +106,11 @@ Full specification: [`docs/mobile/overview.md`](docs/mobile/overview.md)
 
 - **LangGraph Supervisor**: Orchestrates intents and controls state persistence.
 - **Document & Contract Agent**: Multi-page OCR, clause analysis, and deduction checks.
-- **Recruitment Verification Agent**: SLBFE register lookup, license validation vs. job approval, fuzzy name matching (`pg_trgm`).
+- **Recruitment Verification Agent**: SLBFE register lookup, license validation vs. job approval, using core's fuzzy `pg_trgm` agency search.
 - **Migration Guardian Agent**: Consent-aware guidance and risk triage; Day 7/30/90 scheduling and the Agency Watchdog run as `core-api` workers.
 - **Case Support Agent**: Evidence organisation, complaint drafting, and human escalation.
 
-The agent engine runs in `services/ai-service/`. Verification jobs arrive asynchronously over Redis Streams; chat and speech are proxied through `core-api`. Caseworkers review agent outputs and escalations in the admin portal.
+The agent engine runs in `services/ai-service/` (planned, Person 2) on Gemini behind a provider-neutral adapter. Verification jobs arrive asynchronously over Redis Streams; chat and speech are proxied through `core-api`. Caseworkers review agent outputs and escalations in the admin portal. The internal contract is in [`docs/ai-agents/multi-agent-spec.md`](docs/ai-agents/multi-agent-spec.md).
 
 ---
 

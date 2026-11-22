@@ -8,6 +8,10 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
+  ENVIRONMENT: test
+
+permissions:
+  contents: read
 
 jobs:
   core-api:
@@ -106,6 +110,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build core-api image
         run: docker build services/core-api
+      - name: Build admin image
+        run: docker build admin-frontend
+      - name: Build worker web image
+        run: docker build web-frontend
 
   frontends:
     name: admin + worker web lint/build

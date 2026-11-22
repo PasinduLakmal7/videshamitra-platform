@@ -27,8 +27,7 @@ app/
   schemas/         Pydantic request/response DTOs
   services/        business logic
   workers/         outbox relay, AI results, check-ins, agency monitor, cleanup
-migrations/        core schema (001–010)
-seeds/             reserved for SQL fixtures
+migrations/        core schema (001–011)
 scripts/           OpenAPI, contracts, SLBFE import, demo seed
 tests/             unit, contract, integration
 ```
@@ -74,7 +73,9 @@ server-to-server Auth/Storage calls while keeping `SUPABASE_URL` browser-facing
 for signed URLs.
 
 Local development can set `AUTH_DEV_OTP` to exercise the worker OTP flow without
-an SMS provider. It is ignored in production.
+an SMS provider. It only works for worker accounts, never staff, and the service
+refuses to start if it is set outside `ENVIRONMENT=development|test`.
+`ENVIRONMENT` defaults to `production`, so set it explicitly in `.env`.
 
 ## API conventions
 

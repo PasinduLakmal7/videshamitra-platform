@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +16,7 @@ class ChatSessionCreate(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
-    attachments: list[str] = Field(default_factory=list)
+    attachments: list[UUID] = Field(default_factory=list, max_length=10)
     language: str | None = Field(default=None, max_length=8)
 
 

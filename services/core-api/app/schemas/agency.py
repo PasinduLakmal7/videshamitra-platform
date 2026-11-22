@@ -65,10 +65,8 @@ class LicenseHistoryOut(APIModel):
 
 
 class AgencyImportRequest(BaseModel):
-    source: str | None = Field(
-        default=None,
-        description="URL or local path; defaults to SLBFE_SOURCE_URL",
-    )
+    """Imports from the configured SLBFE_SOURCE_URL; ad-hoc sources use the CLI."""
+
     snapshot_date: date | None = None
     dry_run: bool = False
 

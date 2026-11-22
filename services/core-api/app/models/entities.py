@@ -53,8 +53,9 @@ class RequestInfo:
 
     @classmethod
     def from_request(cls, request: Any) -> RequestInfo:
+        # Kong appends the real peer last; earlier hops are client-controlled.
         forwarded = request.headers.get("X-Forwarded-For", "")
-        ip = forwarded.split(",")[0].strip() if forwarded else None
+        ip = forwarded.split(",")[-1].strip() if forwarded else None
         if not ip and request.client:
             ip = request.client.host
         return cls(ip_address=ip, user_agent=request.headers.get("User-Agent"))
