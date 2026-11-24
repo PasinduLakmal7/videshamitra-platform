@@ -3,8 +3,8 @@
 # Local Supabase (Postgres/Auth/Storage) runs outside Compose via the Supabase
 # CLI on ports 54321/54322. Compose runs core-api, its worker, Redis and Kong.
 #
-# ai-service (Person 2) and notification-service (Person 1) join the
-# `internal` network when they land; they must not publish host ports.
+# ai-service runs on the `internal` network only; notification-service (Person 1)
+# joins it when it lands. Neither publishes host ports.
 # Requires ENVIRONMENT and INTERNAL_JWT_SECRET in the root .env.
 #
 #   supabase start
@@ -89,6 +89,30 @@ services:
       redis:
         condition: service_healthy
       core-api:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ./services/ai-service
+      dockerfile: Dockerfile
+    container_name: videshamitra-ai-service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8010"]
+    # No env_file: ai-service must not receive core's Supabase keys.
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:?set ENVIRONMENT in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET in .env (openssl rand -hex 32)}
+      CORE_API_URL: http://core-api:8000
+      REDIS_URL: redis://redis:6379/0
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      FINGERPRINT_PEPPER: ${FINGERPRINT_PEPPER:-}
+    expose:
+      - "8010"
+    depends_on:
+      redis:
         condition: service_healthy
     networks:
       - internal

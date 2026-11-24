@@ -1,6 +1,6 @@
 # Project Progress
 
-**Last updated:** 2026-11-22
+**Last updated:** 2026-11-24
 **Current phase:** M0–M4 core backend implemented and security-hardened; M5 admin portal pages in place; AI/notification services, worker web and live-Supabase verification pending
 **Team:** 3 people — Person 1 platform/core/admin/infra, Person 2 AI (`ai-service`), Person 3 worker web + Flutter mobile + research
 **Mobile app:** Flutter, separate repository (docs/contracts only here)
@@ -18,7 +18,7 @@
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI/notification stubs |
-| AI service (`ai-service`) | ⏸️ Not started; contract documented | Person 2, `docs/ai-agents/multi-agent-spec.md` | Phase 1 skeleton (local roadmap) |
+| AI service (`ai-service`) | 🚧 Skeleton + `ai` schema | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–003 + least-privilege role; 52 unit + 6 integration tests | Phase 3 LLM adapter |
 | Notification service | ⏸️ Placeholder | `services/notification-service/README.md` | Implement device/preference/delivery |
 | Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
@@ -137,8 +137,8 @@
 
 ### Person 2 — AI (`ai-service`)
 
-1. Scaffold `services/ai-service/` (health, internal JWT, core client, Compose,
-   CI) against `docs/ai-agents/multi-agent-spec.md`.
+1. Phase 3: Gemini adapter behind a provider-neutral interface, fake LLM for
+   tests, usage accounting and daily token budget.
 2. Consume `verification.requested` from `vm:ai:requests` and publish
    `verification.completed` / `verification.failed` to `vm:ai:results`.
 3. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
@@ -185,7 +185,9 @@
 | Planning docs | `docs/scope/` (proposals, work division, personal roadmap) and `CLAUDE.md` are local-only and gitignored |
 | Environment default | `ENVIRONMENT` defaults to `production`; dev-only features refuse to run elsewhere |
 | Dev OTP | Optional `AUTH_DEV_OTP` fallback for worker accounts only; startup fails outside development/test |
-| AI/notification Compose | Not yet included; their owners add containers to the internal network |
+| AI/notification Compose | ai-service added (internal network, no ports, no `env_file`, explicit env); notification-service pending |
+| ai-service settings | Root `.env` first, then `services/ai-service/.env` overrides it (own `ai_service_role` DSN) |
+| ai-service DB access | Runtime `DATABASE_URL` = `ai_service_role` (DML on `ai` only); migrations use `MIGRATION_DATABASE_URL` (admin); LangGraph checkpointer `setup()` runs as admin in Phase 8 |
 
 ---
 
@@ -203,6 +205,11 @@
 | Security backlog (medium) | Open | Person 1 | Redis password; non-superuser DB role in Compose; atomic WhatsApp dedupe; pypdf off the event loop; soft delete keeps evidence; system escalation must not take drafts; stale idempotency reservations; worker loop crash isolation; caseworkers editing admins; unverified/non-unique phone; staff overturning AI verdicts; seed script env guard; audio MIME fallback; upstream error text; storage path logging; per-peer internal secrets; HttpOnly refresh cookie for admin |
 | Notification-service implementation | Pending | Person 1 | Placeholder only; contract frozen |
 | Full Compose stack | Pending | Person 1 | Image builds and runs; needs Supabase + worker + AI/notification containers |
+| Compose/CI ai-service additions | Review | Person 1 | Commit `build: add ai-service to compose and ci` on `ai/phase-1-skeleton` |
+| `/internal/v1/audit-events` accepts any allowed issuer | Open (minor) | Person 1 | Spec says `iss=ai-service` only; other internal routes already enforce it |
+| Supabase CLI writes `supabase/.branches/`, `supabase/.temp/` | Open (minor) | Person 1 | Untracked after `supabase start`; consider adding to `.gitignore` |
+| `ai_service_role` login/password per environment | Open | Person 1 / Person 2 | Migration keeps it `nologin`; set login + password out of band; `bootstrap.sql` needs no change (ai migration owns schema + grants) |
+| Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text |
 
 **Active blockers:** none in code; live Supabase/AI/notification verification requires their runtimes.
 
@@ -211,6 +218,36 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-24 — AI Phase 2: `ai` schema and database access
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service` migrations, runner, pool
+- **Changed:** `migrations/001_ai_foundation.sql` (schema, `ai_service_role` usage + DML with default privileges, no CREATE, no `core`, registry revoked; runs, traces, extractions, dedupe), `002_rules.sql` (fee/wage/red-flag rules with demo seed, en/si/ta), `003_chat.sql` (sessions, messages, retention indexes); `app/db/migrate.py` (checksums, advisory lock, refuses edited files); `app/db/pool.py` (`search_path=ai`, not wired until Phase 7); `MIGRATION_DATABASE_URL`; README; spec §3
+- **Verified:** `ruff`, `pytest -q` 52 passed / 6 skipped; migrations twice on throwaway Postgres 16 (3 then 0) and on local Supabase (PG 17); integration 6/6 on both (idempotence, tamper refusal, demo seed, role denied on `core.users`, CREATE and registry, DML allowed, only `*_redacted` text columns, pool `search_path`); `ai_service_role` login checked with psql
+- **Decisions:** separate admin migration DSN; on Supabase the isolation test logs in as the role (`TEST_AI_DATABASE_URL`) because `postgres` cannot `SET ROLE`
+- **Blocked:** none (demo rule data until sourced figures exist)
+- **Next:** Phase 3 (LLM adapter and usage accounting)
+
+### 2026-11-24 — AI Phase 1: ai-service skeleton
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service` scaffold; Compose/CI additions for Person 1 review
+- **Changed:** `pyproject.toml` + pinned `requirements*.txt`; `app/core` (config with `SecretStr` and insecure-secret rejection outside dev/test, JSON logs with PII redaction filter, pure-ASGI request/trace ids, core error envelope, internal JWT verify/mint + `require_core`); `app/guardrails/pii.py` stub (email, NIC, phone); `app/clients/core_api.py` (3 s/15 s timeouts, fresh 60 s token, bounded GET retries, unwraps `{data}`); `/internal/v1/health`; non-root Dockerfile (uid 10001, port 8010); README; Compose `ai-service` (internal only, no ports, no `env_file`); CI `ai-service` job + image build
+- **Verified:** `ruff check`, `ruff format --check`, `pytest -q` 47 passed (auth matrix: missing, bad signature, expired, wrong aud/iss, lifetime > 300 s, missing claims, `none` alg); CI install from pinned requirements re-run, 47 passed; `docker build` ok, container uid 10001; `docker compose config -q` ok (no ports, `internal` only); live: ai-service on :8010, core `/ready` → `ai_service: true`. Not verified: GitHub CI run, Compose stack up
+- **Decisions:** FastAPI 0.165 hides included routes, so the route-guard test checks every OpenAPI path returns 401 without a token; Gemini defaults `gemini-2.5-flash`/`gemini-2.5-pro` until Phase 3
+- **Blocked:** none
+- **Next:** Phase 2 (`ai` schema and database access)
+
+### 2026-11-24 — AI Phase 0: local setup and orientation
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** local environment, contract review
+- **Changed:** `docs/ai-agents/multi-agent-spec.md` §4.3 notes core internal responses use the `{data, meta}` envelope; local `.env` (Supabase keys, `GEMINI_API_KEY`; untracked)
+- **Verified:** `supabase start`, `bootstrap.sql`, migrations 001–011 (second run no-op), demo seed; core `pytest` 100 passed / 1 skipped; Redis + core + worker on host; `/health` 200, `/ready` 200; Gemini key lists models
+- **Decisions:** none
+- **Blocked:** none
+- **Next:** Phase 1 skeleton
 
 ### 2026-11-22 — Security audit fixes, doc alignment, 3-person split
 

@@ -50,9 +50,14 @@
 
 ---
 
-## 3. Data (`ai` schema, planned)
+## 3. Data (`ai` schema)
 
 `analysis_runs`, `agent_traces`, `document_extractions`, `chat_sessions`, `chat_messages` (30-day retention by default), `checkpoints` (LangGraph Postgres saver), `fee_rules`, `wage_floors`, `red_flag_rules`, `scam_fingerprints`, `event_dedupe`. A least-privilege `ai_service_role` has grants on `ai` only.
+
+- Implemented (`services/ai-service/migrations/001`–`003`): runs, traces, extractions, dedupe, rule tables (demo seed), chat. Pending: `scam_fingerprints` (Phase 13) and the checkpointer tables (Phase 8).
+- `ai_service_role` gets usage plus DML on `ai` (default privileges cover later tables). It has no CREATE, no access to `ai.schema_migrations`, and nothing on `core`. Migrations run with an admin DSN (`MIGRATION_DATABASE_URL`).
+- Text is stored only in `*_redacted` columns.
+- The LangGraph `AsyncPostgresSaver.setup()` needs CREATE, so it runs from the migrate CLI with the admin DSN and `search_path=ai`. The runtime role only reads and writes those tables.
 
 ---
 
@@ -86,7 +91,7 @@ Core maps upstream errors: 404 → 404, 429 → rate limited, other 4xx → `ups
 
 ### 4.3 Core endpoints ai-service can call
 
-All need the service JWT with `iss=ai-service`. Every call is audited.
+All need the service JWT with `iss=ai-service`. Every call is audited. JSON responses use core's envelope `{data, meta: {request_id}}`; the shapes below are the `data` value.
 
 - `GET /internal/v1/documents/{id}/content` — raw bytes (`application/pdf`, `image/jpeg`, `image/png`), `Cache-Control: no-store`; 404 missing; 403 over `MAX_UPLOAD_MB`.
 - `GET /internal/v1/agencies/{id}/license-history` — `{agency, licenses: [...]}`.
