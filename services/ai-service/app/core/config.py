@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     DATABASE_URL: str = ""
+    # Admin DSN for migrations only; the runtime role has no CREATE on schema ai.
+    MIGRATION_DATABASE_URL: str = ""
+    DATABASE_MIN_POOL: int = Field(default=1, ge=1)
+    DATABASE_MAX_POOL: int = Field(default=10, ge=1)
+    DATABASE_COMMAND_TIMEOUT: float = Field(default=30.0, gt=0)
     REDIS_URL: str = "redis://localhost:6379/0"
     CORE_API_URL: str = "http://localhost:8000"
 
