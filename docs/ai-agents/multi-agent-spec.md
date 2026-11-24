@@ -86,7 +86,7 @@ Core maps upstream errors: 404 → 404, 429 → rate limited, other 4xx → `ups
 
 ### 4.3 Core endpoints ai-service can call
 
-All need the service JWT with `iss=ai-service`. Every call is audited.
+All need the service JWT with `iss=ai-service`. Every call is audited. JSON responses use core's envelope `{data, meta: {request_id}}`; the shapes below are the `data` value.
 
 - `GET /internal/v1/documents/{id}/content` — raw bytes (`application/pdf`, `image/jpeg`, `image/png`), `Cache-Control: no-store`; 404 missing; 403 over `MAX_UPLOAD_MB`.
 - `GET /internal/v1/agencies/{id}/license-history` — `{agency, licenses: [...]}`.
