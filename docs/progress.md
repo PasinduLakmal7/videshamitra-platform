@@ -18,7 +18,7 @@
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI/notification stubs |
-| AI service (`ai-service`) | 🚧 Skeleton running | `services/ai-service`: health, internal JWT, core client, PII-safe logs; 47 tests; in Compose (internal only) + CI | Phase 2 `ai` schema + `ai_service_role` |
+| AI service (`ai-service`) | 🚧 Skeleton + `ai` schema | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–003 + least-privilege role; 52 unit + 6 integration tests | Phase 3 LLM adapter |
 | Notification service | ⏸️ Placeholder | `services/notification-service/README.md` | Implement device/preference/delivery |
 | Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
@@ -137,8 +137,8 @@
 
 ### Person 2 — AI (`ai-service`)
 
-1. Phase 2: `ai` schema migrations, `ai_service_role` login + grants, asyncpg
-   pool (`DATABASE_URL` in `services/ai-service/.env`).
+1. Phase 3: Gemini adapter behind a provider-neutral interface, fake LLM for
+   tests, usage accounting and daily token budget.
 2. Consume `verification.requested` from `vm:ai:requests` and publish
    `verification.completed` / `verification.failed` to `vm:ai:results`.
 3. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
@@ -187,6 +187,7 @@
 | Dev OTP | Optional `AUTH_DEV_OTP` fallback for worker accounts only; startup fails outside development/test |
 | AI/notification Compose | ai-service added (internal network, no ports, no `env_file`, explicit env); notification-service pending |
 | ai-service settings | Root `.env` first, then `services/ai-service/.env` overrides it (own `ai_service_role` DSN) |
+| ai-service DB access | Runtime `DATABASE_URL` = `ai_service_role` (DML on `ai` only); migrations use `MIGRATION_DATABASE_URL` (admin); LangGraph checkpointer `setup()` runs as admin in Phase 8 |
 
 ---
 
@@ -207,6 +208,8 @@
 | Compose/CI ai-service additions | Review | Person 1 | Commit `build: add ai-service to compose and ci` on `ai/phase-1-skeleton` |
 | `/internal/v1/audit-events` accepts any allowed issuer | Open (minor) | Person 1 | Spec says `iss=ai-service` only; other internal routes already enforce it |
 | Supabase CLI writes `supabase/.branches/`, `supabase/.temp/` | Open (minor) | Person 1 | Untracked after `supabase start`; consider adding to `.gitignore` |
+| `ai_service_role` login/password per environment | Open | Person 1 / Person 2 | Migration keeps it `nologin`; set login + password out of band; `bootstrap.sql` needs no change (ai migration owns schema + grants) |
+| Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text |
 
 **Active blockers:** none in code; live Supabase/AI/notification verification requires their runtimes.
 
@@ -215,6 +218,16 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-24 — AI Phase 2: `ai` schema and database access
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service` migrations, runner, pool
+- **Changed:** `migrations/001_ai_foundation.sql` (schema, `ai_service_role` usage + DML with default privileges, no CREATE, no `core`, registry revoked; runs, traces, extractions, dedupe), `002_rules.sql` (fee/wage/red-flag rules with demo seed, en/si/ta), `003_chat.sql` (sessions, messages, retention indexes); `app/db/migrate.py` (checksums, advisory lock, refuses edited files); `app/db/pool.py` (`search_path=ai`, not wired until Phase 7); `MIGRATION_DATABASE_URL`; README; spec §3
+- **Verified:** `ruff`, `pytest -q` 52 passed / 6 skipped; migrations twice on throwaway Postgres 16 (3 then 0) and on local Supabase (PG 17); integration 6/6 on both (idempotence, tamper refusal, demo seed, role denied on `core.users`, CREATE and registry, DML allowed, only `*_redacted` text columns, pool `search_path`); `ai_service_role` login checked with psql
+- **Decisions:** separate admin migration DSN; on Supabase the isolation test logs in as the role (`TEST_AI_DATABASE_URL`) because `postgres` cannot `SET ROLE`
+- **Blocked:** none (demo rule data until sourced figures exist)
+- **Next:** Phase 3 (LLM adapter and usage accounting)
 
 ### 2026-11-24 — AI Phase 1: ai-service skeleton
 

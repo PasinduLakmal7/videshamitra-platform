@@ -50,9 +50,14 @@
 
 ---
 
-## 3. Data (`ai` schema, planned)
+## 3. Data (`ai` schema)
 
 `analysis_runs`, `agent_traces`, `document_extractions`, `chat_sessions`, `chat_messages` (30-day retention by default), `checkpoints` (LangGraph Postgres saver), `fee_rules`, `wage_floors`, `red_flag_rules`, `scam_fingerprints`, `event_dedupe`. A least-privilege `ai_service_role` has grants on `ai` only.
+
+- Implemented (`services/ai-service/migrations/001`–`003`): runs, traces, extractions, dedupe, rule tables (demo seed), chat. Pending: `scam_fingerprints` (Phase 13) and the checkpointer tables (Phase 8).
+- `ai_service_role` gets usage plus DML on `ai` (default privileges cover later tables). It has no CREATE, no access to `ai.schema_migrations`, and nothing on `core`. Migrations run with an admin DSN (`MIGRATION_DATABASE_URL`).
+- Text is stored only in `*_redacted` columns.
+- The LangGraph `AsyncPostgresSaver.setup()` needs CREATE, so it runs from the migrate CLI with the admin DSN and `search_path=ai`. The runtime role only reads and writes those tables.
 
 ---
 
