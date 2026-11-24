@@ -18,7 +18,7 @@
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI/notification stubs |
-| AI service (`ai-service`) | 🚧 Skeleton + `ai` schema | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–003 + least-privilege role; 52 unit + 6 integration tests | Phase 3 LLM adapter |
+| AI service (`ai-service`) | 🚧 Skeleton, `ai` schema, LLM adapter | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–004 + least-privilege role; Gemini adapter, fake LLM, usage ledger + daily budget; 76 unit + 7 integration tests | Phase 4 guardrails |
 | Notification service | ⏸️ Placeholder | `services/notification-service/README.md` | Implement device/preference/delivery |
 | Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
@@ -137,8 +137,8 @@
 
 ### Person 2 — AI (`ai-service`)
 
-1. Phase 3: Gemini adapter behind a provider-neutral interface, fake LLM for
-   tests, usage accounting and daily token budget.
+1. Phase 4: guardrails (full PII set, prompt-injection wrapping, cited
+   findings only, safety footer, output validation with one retry).
 2. Consume `verification.requested` from `vm:ai:requests` and publish
    `verification.completed` / `verification.failed` to `vm:ai:results`.
 3. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
@@ -187,6 +187,7 @@
 | Dev OTP | Optional `AUTH_DEV_OTP` fallback for worker accounts only; startup fails outside development/test |
 | AI/notification Compose | ai-service added (internal network, no ports, no `env_file`, explicit env); notification-service pending |
 | ai-service settings | Root `.env` first, then `services/ai-service/.env` overrides it (own `ai_service_role` DSN) |
+| LLM | Gemini via `google-genai` behind `LLMClient`; every call through `MeteredLLM` (PII redaction, ledger `ai.llm_usage`, daily token budget fails closed); SDK given an owned `httpx.AsyncClient` (it otherwise picks `httpx2`); FAST tier uses low thinking |
 | ai-service DB access | Runtime `DATABASE_URL` = `ai_service_role` (DML on `ai` only); migrations use `MIGRATION_DATABASE_URL` (admin); LangGraph checkpointer `setup()` runs as admin in Phase 8 |
 
 ---
@@ -209,6 +210,7 @@
 | `/internal/v1/audit-events` accepts any allowed issuer | Open (minor) | Person 1 | Spec says `iss=ai-service` only; other internal routes already enforce it |
 | Supabase CLI writes `supabase/.branches/`, `supabase/.temp/` | Open (minor) | Person 1 | Untracked after `supabase start`; consider adding to `.gitignore` |
 | `ai_service_role` login/password per environment | Open | Person 1 / Person 2 | Migration keeps it `nologin`; set login + password out of band; `bootstrap.sql` needs no change (ai migration owns schema + grants) |
+| Gemini model access (free-tier key) | Open | Person 2 | `gemini-2.5-*` closed to new keys; pro models (`v1beta`) return 429 on this key, so FAST = PRO = `gemini-3.5-flash`; free-tier latency 18–46 s per call puts the < 15 s verdict target at risk; paid key needed for PRO and real data |
 | Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text |
 
 **Active blockers:** none in code; live Supabase/AI/notification verification requires their runtimes.
@@ -218,6 +220,16 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-24 — AI Phase 3: LLM adapter and usage accounting
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service/app/llm`, PR #2 merge
+- **Changed:** PR #2 (phases 0–2) merged to `main` after adding `respx` to core's CI install (core-api job was already failing on `main`); `app/llm/base.py` (`LLMClient`, tiers, errors, PII hook), `gemini.py` (JSON schema output, safety settings, hard timeout, bounded retries with jitter, error mapping and redaction, owned httpx transport, low thinking for FAST), `fake.py` (deterministic, keyed on redacted prompt), `usage.py` (cost estimates, `MeteredLLM` budget guard failing closed, `PgUsageStore`); migration `004_llm_usage.sql`; `scripts/llm_smoke.py`; defaults `gemini-3.5-flash`, `LLM_TIMEOUT_SECONDS=60`
+- **Verified:** `ruff`, `pytest -q` 76 passed / 7 skipped (retry path, 429/5xx, bounded attempts, hard timeout, transport timeout, schema failure, blocked prompt, key never in URL or errors, redacted prompt on the wire); integration 7/7 on Postgres 16 and Supabase (runtime role); live smoke: typed `SmokeResult` from `gemini-3.5-flash` (66 in / 87 out); PR #2 CI all 5 jobs green
+- **Decisions:** per-call ledger table instead of only `analysis_runs` (chat calls have no run); FAST tier low thinking (46 s → 18.5 s on the same prompt); cost table holds only `gemini-3.5-flash` (USD 1.50 / 9.00 per 1M, Google list price)
+- **Blocked:** PRO-tier models need a paid key (see blockers)
+- **Next:** Phase 4 (guardrails)
 
 ### 2026-11-24 — AI Phase 2: `ai` schema and database access
 
