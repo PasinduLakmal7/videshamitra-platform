@@ -1,15 +1,17 @@
 # Docker Compose — core platform (local)
 #
 # Local Supabase (Postgres/Auth/Storage) runs outside Compose via the Supabase
-# CLI on ports 54321/54322. Compose runs core-api, its worker, Redis and Kong.
+# CLI on ports 54321/54322. Compose runs core-api, its worker, ai-service,
+# notification-service and its worker, Redis and Kong.
 #
-# ai-service runs on the `internal` network only; notification-service (Person 1)
-# joins it when it lands. Neither publishes host ports.
-# Requires ENVIRONMENT and INTERNAL_JWT_SECRET in the root .env.
+# ai-service and notification-service run on the `internal` network only;
+# neither publishes host ports. Requires ENVIRONMENT and INTERNAL_JWT_SECRET in
+# the root .env.
 #
 #   supabase start
 #   psql "postgresql://postgres:postgres@localhost:54322/postgres" -f supabase/bootstrap.sql
 #   services/core-api/.venv/bin/python -m app.db.migrate
+#   services/notification-service/.venv/bin/python -m app.db.migrate --dsn <admin-dsn>
 #   docker compose up --build
 #
 # Kong is the only published entry point (http://localhost:8000).
@@ -111,6 +113,83 @@ services:
       FINGERPRINT_PEPPER: ${FINGERPRINT_PEPPER:-}
     expose:
       - "8010"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: videshamitra-notification-service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8020"]
+    # No env_file: notification-service must not receive core's Supabase keys.
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:?set ENVIRONMENT in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DOCKER_NOTIFICATION_DATABASE_URL:?set DOCKER_NOTIFICATION_DATABASE_URL in .env (notification_service_role DSN)}
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET in .env (openssl rand -hex 32)}
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-stub}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FCM_SERVICE_ACCOUNT_FILE: ${FCM_SERVICE_ACCOUNT_FILE:-}
+      FCM_SERVICE_ACCOUNT_JSON: ${FCM_SERVICE_ACCOUNT_JSON:-}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v21.0}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_TEMPLATE_NAME: ${WHATSAPP_TEMPLATE_NAME:-notification_generic}
+      WHATSAPP_TEMPLATE_LANGUAGE: ${WHATSAPP_TEMPLATE_LANGUAGE:-en}
+      QUIET_HOURS_TIMEZONE: ${QUIET_HOURS_TIMEZONE:-Asia/Colombo}
+      DELIVERY_MAX_ATTEMPTS: ${DELIVERY_MAX_ATTEMPTS:-6}
+      DELIVERY_POLL_INTERVAL_SECONDS: ${DELIVERY_POLL_INTERVAL_SECONDS:-2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    expose:
+      - "8020"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8020/internal/v1/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    networks:
+      - internal
+    restart: unless-stopped
+
+  notification-worker:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: videshamitra-notification-worker
+    command: ["python", "-m", "app.worker"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:?set ENVIRONMENT in .env}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DOCKER_NOTIFICATION_DATABASE_URL:?set DOCKER_NOTIFICATION_DATABASE_URL in .env (notification_service_role DSN)}
+      REDIS_URL: redis://redis:6379/0
+      INTERNAL_JWT_SECRET: ${INTERNAL_JWT_SECRET:?set INTERNAL_JWT_SECRET in .env (openssl rand -hex 32)}
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-stub}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      FCM_SERVICE_ACCOUNT_FILE: ${FCM_SERVICE_ACCOUNT_FILE:-}
+      FCM_SERVICE_ACCOUNT_JSON: ${FCM_SERVICE_ACCOUNT_JSON:-}
+      WHATSAPP_ENABLED: ${WHATSAPP_ENABLED:-false}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v21.0}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_TEMPLATE_NAME: ${WHATSAPP_TEMPLATE_NAME:-notification_generic}
+      WHATSAPP_TEMPLATE_LANGUAGE: ${WHATSAPP_TEMPLATE_LANGUAGE:-en}
+      QUIET_HOURS_TIMEZONE: ${QUIET_HOURS_TIMEZONE:-Asia/Colombo}
+      DELIVERY_MAX_ATTEMPTS: ${DELIVERY_MAX_ATTEMPTS:-6}
+      DELIVERY_POLL_INTERVAL_SECONDS: ${DELIVERY_POLL_INTERVAL_SECONDS:-2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy
