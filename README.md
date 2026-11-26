@@ -15,7 +15,7 @@ VideshaMitra is a trilingual (Sinhala, Tamil, English), agentic AI migration-saf
 | `admin-frontend/` | SLBFE caseworkers & admins | React + Vite + TypeScript |
 | `services/core-api/` | All clients — public API | FastAPI + asyncpg + Redis |
 | `services/ai-service/` (planned) | Core API — internal | FastAPI + LangGraph + Gemini |
-| `services/notification-service/` (planned) | Core API — internal | FastAPI + FCM/WhatsApp |
+| `services/notification-service/` | Core API — internal | FastAPI + FCM/WhatsApp |
 
 The worker mobile app is the primary product for normal users. It is Android-first and built for low-connectivity environments, with:
 
@@ -37,7 +37,7 @@ videshamitra-platform/
 ├── services/
 │   ├── core-api/            # Public API, transactional core, admin APIs
 │   ├── ai-service/          # (planned) LangGraph, OCR, LLM, speech, traces
-│   └── notification-service/ # (planned) Device tokens, preferences, delivery
+│   └── notification-service/ # Device tokens, preferences, FCM/WhatsApp delivery
 ├── packages/contracts/      # Versioned event + internal API contracts
 ├── admin-frontend/          # React + Vite + TS caseworker/admin interface
 ├── web-frontend/            # React + Vite + TS worker web application
@@ -74,13 +74,18 @@ bring up Kong + core + worker + Redis with `docker compose up --build`
 (public edge: `http://localhost:8000`). Admin portal: `admin-frontend/`
 (`npm run dev`, port 5174). See [`services/core-api/README.md`](services/core-api/README.md).
 
+Notification service: apply its migrations with an admin DSN, start
+`uvicorn app.main:app --port 8020` and `python -m app.worker`, or use the
+`notification-service` / `notification-worker` Compose services. See
+[`services/notification-service/README.md`](services/notification-service/README.md).
+
 ---
 
 ## 🔗 Related Repositories
 
 | Repository | Contents |
 |---|---|
-| **videshamitra-platform** (this repo) | Three services (`core-api`; `ai-service` and `notification-service` planned), worker web portal, admin portal, database, infrastructure, documentation |
+| **videshamitra-platform** (this repo) | Three services (`core-api` and `notification-service` implemented; `ai-service` in progress), worker web portal, admin portal, database, infrastructure, documentation |
 | **Worker mobile app** (separate repo) | Flutter app for migrant workers (Android first, then iOS); consumes the same `/api/v1` API |
 
 ---

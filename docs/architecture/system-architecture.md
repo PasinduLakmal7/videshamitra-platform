@@ -165,15 +165,15 @@ leak database rows or another service's models.
 | `core-api` | FastAPI/uvicorn | **Yes** via Kong | `core` schema, `documents` bucket metadata, public API, admin API | Postgres, Redis, Supabase Auth/Storage, ai-service, notification-service |
 | `core-api-worker` | Same image, different command | No | Background processing only | Postgres, Redis, AI/notification clients |
 | `ai-service` (planned) | FastAPI + LangGraph | No | `ai` schema: runs, traces, OCR text, chat, checkpoints, rules, fingerprints | Postgres, Redis, Gemini, core-api document bytes |
-| `notification-service` (planned) | FastAPI worker | No | `notification` schema: tokens, preferences, deliveries, attempts | Postgres, Redis, FCM, WhatsApp, SMS |
+| `notification-service` | FastAPI worker | No | `notification` schema: tokens, preferences, deliveries, attempts | Postgres, Redis, FCM, WhatsApp, SMS |
 | Kong | Kong OSS, DB-less | Edge | Routing, CORS, rate/size limits | core-api |
 | Supabase | CLI local / managed production | Infrastructure | Postgres, Auth, Storage | — |
 | Redis | Redis 7 | Infrastructure | Streams, event backlog, dead letters, lightweight rate limits | — |
 
 **Implementation status (see [`progress.md`](../progress.md)):** `core-api` is
 implemented end to end against its plan; the admin portal is implemented;
-`notification-service` is a documented placeholder; `ai-service` is owned by
-Person 2 and not yet implemented in this repository.
+`notification-service` is implemented against the frozen contracts with live
+FCM/WhatsApp verification pending; `ai-service` is in progress (Person 2).
 
 ---
 
@@ -471,9 +471,10 @@ flowchart TB
 ```
 
 - Supabase runs via the Supabase CLI (`supabase start`).
-- `docker compose` runs `core-api`, `core-api-worker`, Redis, and Kong.
-- `ai-service` and `notification-service` join the internal network when their
-  scaffolds land; they must not publish host ports.
+- `docker compose` runs `core-api`, `core-api-worker`, `ai-service`,
+  `notification-service`, `notification-worker`, Redis, and Kong.
+- `ai-service` and `notification-service` are on the internal network only;
+  they must not publish host ports.
 - Kong is the only public API entry point.
 
 ### 10.2 Production recommendation
@@ -580,8 +581,9 @@ at-least-once delivery, idempotent consumers, and compensating state changes.
 - **Contracts:** OpenAPI and event JSON Schemas are committed and checked for
   staleness in CI.
 - **Frontends:** admin ESLint + TypeScript + Vite build; worker web build.
-- **Container:** core image builds; Kong config parses; Compose config validates.
-- **Not yet automated:** live Supabase Auth/Storage, AI/notification stubs,
+- **Container:** core and notification images build; Kong config parses; Compose
+  config validates.
+- **Not yet automated:** live Supabase Auth/Storage, live FCM/WhatsApp delivery,
   Playwright E2E, full Compose stack, production load tests.
 
 ---
@@ -614,12 +616,12 @@ at-least-once delivery, idempotent consumers, and compensating state changes.
 | Agencies, SLBFE import, license watchdog | ✅ Implemented (fixtures until real source is confirmed) |
 | Documents, signed URLs, verification orchestration, AI result consumer | ✅ Implemented; live Supabase Storage not yet exercised |
 | Journeys, check-ins, escalation | ✅ Implemented |
-| In-app notifications, request publisher, device/preference proxy | ✅ Implemented (notification service pending) |
+| In-app notifications, request publisher, device/preference proxy | ✅ Implemented |
 | Complaints/cases/admin APIs | ✅ Implemented |
 | Admin portal | ✅ Pages implemented; Playwright E2E pending |
 | Chat/speech/WhatsApp proxies | ✅ Implemented against the frozen internal contract |
-| `ai-service` | ⏸️ Person 2 (contract in `docs/ai-agents/multi-agent-spec.md`) |
-| `notification-service` | ⏸️ Placeholder (Person 1) |
+| `ai-service` | 🚧 Person 2 (contract in `docs/ai-agents/multi-agent-spec.md`) |
+| `notification-service` | 🚧 Implemented; live FCM/WhatsApp verification pending |
 | Worker web portal | ⏸️ Vite scaffold (Person 3) |
 | Local/full Compose + Supabase + stubs | 🚧 Partially verified |
 | Production deployment | ⏸️ Not yet |

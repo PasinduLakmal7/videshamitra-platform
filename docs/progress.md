@@ -1,7 +1,7 @@
 # Project Progress
 
-**Last updated:** 2026-11-24
-**Current phase:** M0–M4 core backend implemented and security-hardened; M5 admin portal pages in place; AI/notification services, worker web and live-Supabase verification pending
+**Last updated:** 2026-11-26
+**Current phase:** M0–M4 core backend implemented and security-hardened; M5 admin portal pages in place; notification-service implemented; AI service, worker web and live-Supabase verification pending
 **Team:** 3 people — Person 1 platform/core/admin/infra, Person 2 AI (`ai-service`), Person 3 worker web + Flutter mobile + research
 **Mobile app:** Flutter, separate repository (docs/contracts only here)
 
@@ -17,16 +17,16 @@
 |---|---|---|---|
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
-| Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI/notification stubs |
+| Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI stub + notification live providers |
 | AI service (`ai-service`) | 🚧 Skeleton + `ai` schema | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–003 + least-privilege role; 52 unit + 6 integration tests | Phase 3 LLM adapter |
-| Notification service | ⏸️ Placeholder | `services/notification-service/README.md` | Implement device/preference/delivery |
+| Notification service | 🚧 Implemented; live provider verification pending | `services/notification-service`: device/preference API, stream consumer, FCM/WhatsApp adapters, retries, migrations 001–003, Compose/CI; 63 unit/contract + 5 integration tests | Verify FCM credentials, WhatsApp templates/recipient, per-peer secrets |
 | Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
 | Database | ✅ Migrations 001–011 + seed | `services/core-api/migrations`; 001–011 verified on Postgres 16 | Live Supabase storage policy check |
 | Auth | 🚧 Supabase proxy + JWT verification, hardened | `app/core/security.py`, `app/services/auth_service.py` | Live Supabase login/OTP test |
-| Tests | ✅ Unit/contract; integration gated | 100 pass, 1 skipped (needs `TEST_DATABASE_URL`) | Add event round-trip + E2E with stubs |
+| Tests | ✅ Unit/contract; integration gated | Core: 100 pass, 1 skipped; notification: 63 unit/contract + 5 integration | Add event round-trip + E2E with stubs |
 | CI | ✅ Updated, not yet run on GitHub | `.github/workflows/ci.yml` | Watch first run |
-| Infrastructure | 🚧 Compose/Kong valid; core + frontend images build | `docker-compose.yml`, `infra/kong/kong.yml`, nginx-unprivileged frontend images | Full stack with Supabase + workers |
+| Infrastructure | 🚧 Compose/Kong valid; core + notification + frontend images build | `docker-compose.yml`, `infra/kong/kong.yml`, nginx-unprivileged frontend images | Full stack with Supabase + workers |
 
 **Legend:** ✅ done · 🚧 in progress · ⏸️ planned/scaffold · ⚠️ needs attention · ⛔ blocked · 📄 external
 
@@ -51,11 +51,14 @@
   `docs/api/openapi.json` with generated admin types.
 - `admin-frontend/` has a working login/dashboard/cases/case detail/agencies/
   users/audit UI against the core API (typecheck + build pass).
-- `services/notification-service/` is a documented placeholder; `ai-service` is
-  Person 2's deployable.
+- `services/notification-service/` implements the internal notification
+  deployable: FCM tokens, preferences/quiet hours, stream consumer with dedupe,
+  FCM HTTP v1 and WhatsApp adapters, delivery attempts, retries and migrations;
+  it is not exposed through Kong. Live provider delivery is not verified.
+- `services/ai-service/` is Person 2's deployable.
 - The worker mobile app remains in a separate repository.
-- Live Supabase Auth/Storage, AI/notification stubs, the full Compose stack, and
-  Playwright E2E have **not** been verified in this environment.
+- Live Supabase Auth/Storage, live FCM/WhatsApp delivery, the full Compose
+  stack, and Playwright E2E have **not** been verified in this environment.
 
 ### Source of truth
 
@@ -101,6 +104,7 @@
 - [x] Whole-platform architecture document added (`docs/architecture/system-architecture.md`), linked from README and architecture docs.
 - [x] Security audit fixes (critical/high): dev OTP lock-down, insecure-default rejection, `ENVIRONMENT` defaults to production, RLS/storage write lock-down (`011`), OTP/login rate limits fail closed with trusted client IP, stale `pending` recovery with retry cap, check-in consent revoke, SLBFE import source lock-down, internal token lifetime + per-route issuer, chat attachment ownership, hardened frontend images, Compose env fixes, admin session storage.
 - [x] 3-person work division, Flutter + FCM mobile docs, ai-service contract (`docs/ai-agents/multi-agent-spec.md`).
+- [x] notification-service implementation: `notification` schema + role, internal device/preference API, stream consumer/dedupe/DLQ, quiet hours, delivery worker, FCM/WhatsApp/stub adapters, Compose + CI; 63 unit/contract + 5 integration tests.
 
 ---
 
@@ -110,10 +114,12 @@
   upload/signed URLs, and RLS policies against the real local stack.
 - **Admin E2E:** Playwright flow (login → dashboard → case queue → case detail →
   note → escalate → audit) with seeded data.
-- **AI/notification stubs:** wire Compose/integration tests and complete the
-  verification round trip with an AI stub.
-- **Docker image:** the core image builds and starts (health verified);
-  run the full Compose stack with a live Supabase stack and the worker.
+- **AI/notification integration:** complete the verification round trip with an
+  AI stub and exercise notification delivery through core + Redis.
+- **Notification live providers:** FCM credentials and WhatsApp templates are
+  still placeholders; per-peer internal JWT secrets are a release gate.
+- **Docker image:** the core and notification images build and start (health
+  verified); run the full Compose stack with a live Supabase stack and workers.
 
 ---
 
@@ -127,11 +133,13 @@
    rejection; check `documents` bucket policies.
 3. Run the migration integration test with `TEST_DATABASE_URL` and verify RLS as
    `authenticated` (worker cannot read another worker's rows).
-4. Add the notification-service implementation (devices, preferences, delivery)
-   against the frozen `notification.requested.v1` contract.
+4. Verify notification-service live providers: add FCM credentials, confirm
+   device/preference proxies end to end, and decide the WhatsApp recipient
+   source (the frozen event has no phone number). Resolve per-peer internal
+   secrets before release.
 5. Add Playwright E2E for the admin portal.
-6. Build the core image and run `docker compose up --build`; add AI/notification
-   containers when their scaffolds land.
+6. Run the full `docker compose up --build` stack with Supabase and workers;
+   add real FCM/WhatsApp credentials for live delivery.
 7. Review the audit fixes on branch `audit-fixes`, then work the security backlog
    below and change requests CR-1…CR-9 (`docs/ai-agents/multi-agent-spec.md`).
 
@@ -154,7 +162,8 @@
 
 ### Shared
 
-1. Run the verification vertical slice end to end with AI/notification stubs.
+1. Run the verification vertical slice end to end with the AI stub and the
+   notification-service stub provider.
 2. Validate the event schemas in CI (`scripts/export_contracts.py --check`).
 3. Complete the release smoke test (`CORE-50`).
 
@@ -172,6 +181,9 @@
 | Async work | Redis Streams + transactional outbox + idempotent consumers |
 | AI execution | Async jobs; AI-service publishes results |
 | Notification delivery | `notification-service`; core owns in-app feed only |
+| Push provider | FCM HTTP v1; Expo removed with the Flutter migration |
+| Notification preferences | Per-user channel opt-in, quiet hours, timezone (`Asia/Colombo` default) |
+| Notification DB access | Runtime `notification_service_role` DML only; admin `MIGRATION_DATABASE_URL` for migrations |
 | Complaints/cases | `core-api` |
 | Check-ins + agency watchdog | `core-api` workers |
 | Chat/speech | `core-api` proxies to `ai-service` |
@@ -185,7 +197,7 @@
 | Planning docs | `docs/scope/` (proposals, work division, personal roadmap) and `CLAUDE.md` are local-only and gitignored |
 | Environment default | `ENVIRONMENT` defaults to `production`; dev-only features refuse to run elsewhere |
 | Dev OTP | Optional `AUTH_DEV_OTP` fallback for worker accounts only; startup fails outside development/test |
-| AI/notification Compose | ai-service added (internal network, no ports, no `env_file`, explicit env); notification-service pending |
+| AI/notification Compose | ai-service and notification-service/worker added (internal network, no ports, no `env_file`, explicit env) |
 | ai-service settings | Root `.env` first, then `services/ai-service/.env` overrides it (own `ai_service_role` DSN) |
 | ai-service DB access | Runtime `DATABASE_URL` = `ai_service_role` (DML on `ai` only); migrations use `MIGRATION_DATABASE_URL` (admin); LangGraph checkpointer `setup()` runs as admin in Phase 8 |
 
@@ -203,21 +215,34 @@
 | AI-service detailed task plan | Done (local roadmap) | Person 2 | Contract in `docs/ai-agents/multi-agent-spec.md` |
 | Core change requests CR-1…CR-9 | Open | Person 1 (spec: Person 2) | Needed for unable-to-verify, agency search, escalation, drafts, WhatsApp, data rights |
 | Security backlog (medium) | Open | Person 1 | Redis password; non-superuser DB role in Compose; atomic WhatsApp dedupe; pypdf off the event loop; soft delete keeps evidence; system escalation must not take drafts; stale idempotency reservations; worker loop crash isolation; caseworkers editing admins; unverified/non-unique phone; staff overturning AI verdicts; seed script env guard; audio MIME fallback; upstream error text; storage path logging; per-peer internal secrets; HttpOnly refresh cookie for admin |
-| Notification-service implementation | Pending | Person 1 | Placeholder only; contract frozen |
-| Full Compose stack | Pending | Person 1 | Image builds and runs; needs Supabase + worker + AI/notification containers |
+| Notification-service implementation | Done (live providers pending) | Person 1 | Device/preference API, consumer, FCM/WhatsApp adapters, retries, migrations, Compose/CI |
+| WhatsApp recipient source | Open | Person 1 / Person 3 | The frozen `notification.requested` event has no phone number; adapter needs a `phone` value in `data` or a contract addition |
+| Per-peer internal secrets | Open (release gate) | Person 1 | Architecture requires per-peer secrets before notification-service ships |
+| `notification_service_role` login/password | Open | Person 1 | Migration keeps it `nologin`; set login + password out of band; runtime uses its DSN |
+| Full Compose stack | Pending | Person 1 | Images build; needs Supabase + workers + provider credentials |
 | Compose/CI ai-service additions | Review | Person 1 | Commit `build: add ai-service to compose and ci` on `ai/phase-1-skeleton` |
 | `/internal/v1/audit-events` accepts any allowed issuer | Open (minor) | Person 1 | Spec says `iss=ai-service` only; other internal routes already enforce it |
 | Supabase CLI writes `supabase/.branches/`, `supabase/.temp/` | Open (minor) | Person 1 | Untracked after `supabase start`; consider adding to `.gitignore` |
 | `ai_service_role` login/password per environment | Open | Person 1 / Person 2 | Migration keeps it `nologin`; set login + password out of band; `bootstrap.sql` needs no change (ai migration owns schema + grants) |
 | Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text |
 
-**Active blockers:** none in code; live Supabase/AI/notification verification requires their runtimes.
+**Active blockers:** none in code; live Supabase/AI/FCM/WhatsApp verification requires their runtimes and credentials.
 
 ---
 
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-26 — notification-service implementation
+
+- **Agent/session:** coding agent
+- **Scope:** `services/notification-service`, Compose/CI/env/docs
+- **Changed:** FastAPI internal API (`/internal/v1/devices`, `/preferences/{user_id}`, `/health`), `notification` migrations 001–003 + role/grants, asyncpg/Redis, strict event consumer with dedupe/DLQ, quiet-hours logic, delivery worker with retries, FCM HTTP v1 + WhatsApp + stub providers, unit/contract/integration tests, Dockerfile, Compose `notification-service` + `notification-worker` (internal only, no ports), CI jobs/image build, `.env.example`, docs/progress
+- **Verified:** `ruff check`/`format --check`; 63 unit/contract passed; 5 integration passed on Postgres 16 (migrations twice, role isolation, event→delivery duplicate-safe, stub sent, invalid-token deactivation); live API `/health`, `/ready`, device register/preferences/unregister through the internal API; `docker compose config -q`; image builds (podman). Not verified: real FCM/WhatsApp delivery, GitHub CI run, full Compose stack
+- **Decisions:** FCM HTTP v1 is the push provider (Expo removed); FCM data is stringified and carries `type`/`notification_id`/`deep_link`; WhatsApp stays disabled by default and needs a recipient source; runtime role uses DML only with an admin migration DSN; quiet hours defer by default (`Asia/Colombo`)
+- **Blocked:** FCM credentials and WhatsApp template/recipient decisions; per-peer internal secrets before release
+- **Next:** add Firebase credentials and run a live FCM push; decide WhatsApp recipient source and approve templates
 
 ### 2026-11-24 — AI Phase 2: `ai` schema and database access
 
