@@ -65,3 +65,11 @@ def test_log_line_is_redacted_json_with_ids():
     assert line["service"] == "ai-service"
     assert line["request_id"] == "req-9"
     assert line["trace_id"] == "trace-9"
+
+
+def test_log_line_redacts_pii_inside_sinhala_and_tamil_text():
+    logger, stream = _capture()
+    logger.info("ගිණුම් අංකය 8001234567, தொலைபேசி+94771234567, NIC අංකය901234567V")
+    line = json.loads(stream.getvalue())
+    for raw in ("8001234567", "+94771234567", "901234567V"):
+        assert raw not in line["message"]
