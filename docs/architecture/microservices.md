@@ -4,9 +4,10 @@
 > deployment, reliability) is in [`system-architecture.md`](system-architecture.md).
 >
 > **Status:** `core-api` is implemented (M0–M4 backend, admin APIs, chat/speech
-> proxies, CI/Compose/contracts). `ai-service` and `notification-service` remain
-> separate deployables; the notification service is a documented placeholder.
-> See [`docs/progress.md`](../progress.md).
+> proxies, CI/Compose/contracts). `notification-service` is implemented
+> (device/preference API, stream consumer, FCM/WhatsApp adapters, retries,
+> migrations, Compose/CI); live provider verification is pending. `ai-service`
+> is in progress. See [`docs/progress.md`](../progress.md).
 
 ## 1. Goals
 
@@ -199,7 +200,7 @@ videshamitra-platform/
 Migration from the original scaffold:
 
 1. Move `web-backend/` → `services/core-api/` (done).
-2. Add `services/ai-service/` (Person 2, not started) and `services/notification-service/` (README placeholder only).
+2. Add `services/ai-service/` (Person 2, in progress) and `services/notification-service/` (Person 1, implemented).
 3. Add `packages/contracts/`.
 4. Add Redis + outbox to Compose.
 5. Add per-service migrations and roles.

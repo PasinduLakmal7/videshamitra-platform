@@ -51,11 +51,15 @@ The `ai` schema is planned; it lands with `ai-service` (Person 2).
 
 - `device_tokens`: FCM registration tokens, platform, app version, last seen
 - `notification_preferences`: Channel opt-in and quiet hours
-- `deliveries`: Delivery request per notification/channel
+- `deliveries`: Delivery request per notification/channel, including the
+  message content and next-attempt schedule needed by the worker
 - `delivery_attempts`: Retry history, provider message IDs, errors
 - `event_dedupe`: Consumer idempotency by `event_id`
 
 `notification-service` receives notification content and user IDs in events. It never reads `core.users`.
+The schema is implemented by `services/notification-service/migrations/`; the
+runtime role has DML on `notification` only and cannot read `core`/`ai` or the
+migration registry.
 
 ## Isolation rules
 

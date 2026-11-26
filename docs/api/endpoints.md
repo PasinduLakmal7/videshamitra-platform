@@ -83,8 +83,9 @@ envelopes, pagination, request IDs, idempotency, and the event contracts in
 [`packages/contracts`](../../packages/contracts/). The generated contract is
 [`openapi.json`](openapi.json).
 
-`ai-service` and `notification-service` internal contracts are frozen but their
-implementations are separate deployables.
+`ai-service` and `notification-service` internal contracts are frozen and
+implemented; `notification-service` live FCM/WhatsApp delivery is pending
+provider credentials.
 
 ## Mobile client contract
 
