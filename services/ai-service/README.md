@@ -57,6 +57,32 @@ TEST_AI_DATABASE_URL="$DATABASE_URL" .venv/bin/pytest -q tests/integration
 The rule tables (`fee_rules`, `wage_floors`, `red_flag_rules`) are seeded with
 **demo data**, marked in each row's `source`. They are not official SLBFE figures.
 
+## LLM
+
+Every model call goes through `app.llm.usage.MeteredLLM`, wrapping a provider (`GeminiClient`;
+`FakeLLM` in tests).
+
+- **PII:** text parts pass through `guardrails.pii.redact` before they leave the service.
+- **Models:** `ModelTier.FAST` is for classification and normalisation and uses low thinking;
+  `ModelTier.PRO` is for multi-page contracts. Both default to `gemini-3.5-flash`, because the 2.5
+  models are closed to new keys and the pro models need a paid key.
+- **Failures:** each attempt has a hard timeout, and only 429, 5xx and transport errors are retried,
+  with bounded backoff and jitter. Errors map to `llm_unavailable`, `llm_rejected` or
+  `llm_invalid_output`, and provider messages are truncated and redacted.
+- **Budget:** each call is logged in `ai.llm_usage`, and added to `ai.analysis_runs` when there is a
+  run. Calls are refused with `budget_exceeded` once the daily total reaches
+  `LLM_DAILY_TOKEN_BUDGET`, or with `llm_unavailable` if the usage ledger can't be read.
+
+The SDK supports both `httpx` and `httpx2`, so `GeminiClient` passes in its own `httpx.AsyncClient`.
+That keeps errors predictable and lets respx intercept every request: unit tests never reach the
+network.
+
+Manual smoke test against the real API, using a synthetic prompt (not run in CI):
+
+```bash
+ENVIRONMENT=development .venv/bin/python scripts/llm_smoke.py [--pro]
+```
+
 ## Auth
 
 Every `/internal/v1/*` route except `/internal/v1/health` requires a core service JWT:

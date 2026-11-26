@@ -18,7 +18,7 @@
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI stub + notification live providers |
-| AI service (`ai-service`) | 🚧 Skeleton + `ai` schema | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–003 + least-privilege role; 52 unit + 6 integration tests | Phase 3 LLM adapter |
+| AI service (`ai-service`) | 🚧 Skeleton, `ai` schema, LLM adapter, guardrails | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–004 + least-privilege role; Gemini adapter, fake LLM, usage ledger + daily budget; guardrails (PII, injection, cited findings, safety footer, validated output); 197 unit + 7 integration tests | Phase 5 extraction |
 | Notification service | 🚧 Implemented; live provider verification pending | `services/notification-service`: device/preference API, stream consumer, FCM/WhatsApp adapters, retries, migrations 001–003, Compose/CI; 63 unit/contract + 5 integration tests | Verify FCM credentials, WhatsApp templates/recipient, per-peer secrets |
 | Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
@@ -145,8 +145,8 @@
 
 ### Person 2 — AI (`ai-service`)
 
-1. Phase 3: Gemini adapter behind a provider-neutral interface, fake LLM for
-   tests, usage accounting and daily token budget.
+1. Phase 5: document extraction and multi-page stitching (use `wrap_untrusted` +
+   `generate_validated`; findings carry `guardrails.sources.Citation`).
 2. Consume `verification.requested` from `vm:ai:requests` and publish
    `verification.completed` / `verification.failed` to `vm:ai:results`.
 3. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
@@ -199,6 +199,8 @@
 | Dev OTP | Optional `AUTH_DEV_OTP` fallback for worker accounts only; startup fails outside development/test |
 | AI/notification Compose | ai-service and notification-service/worker added (internal network, no ports, no `env_file`, explicit env) |
 | ai-service settings | Root `.env` first, then `services/ai-service/.env` overrides it (own `ai_service_role` DSN) |
+| LLM | Gemini via `google-genai` behind `LLMClient`; every call through `MeteredLLM` (PII redaction, ledger `ai.llm_usage`, daily token budget fails closed); SDK given an owned `httpx.AsyncClient` (it otherwise picks `httpx2`); FAST tier uses low thinking |
+| AI guardrails | `app/guardrails/`: `redact` (logs, LLM hook) + `redact_with_mapping`/`restore` for user output; `wrap_untrusted` + `with_policy` on every prompt with untrusted text; `generate_validated` for every structured call (one retry, hint without values); `ground` drops findings without a known document page, SLBFE record or rule row (none left → `unable_to_verify`); every user-facing verdict/answer goes through `finalize_user_text` (Phases 7, 10) |
 | ai-service DB access | Runtime `DATABASE_URL` = `ai_service_role` (DML on `ai` only); migrations use `MIGRATION_DATABASE_URL` (admin); LangGraph checkpointer `setup()` runs as admin in Phase 8 |
 
 ---
@@ -224,7 +226,8 @@
 | `/internal/v1/audit-events` accepts any allowed issuer | Open (minor) | Person 1 | Spec says `iss=ai-service` only; other internal routes already enforce it |
 | Supabase CLI writes `supabase/.branches/`, `supabase/.temp/` | Open (minor) | Person 1 | Untracked after `supabase start`; consider adding to `.gitignore` |
 | `ai_service_role` login/password per environment | Open | Person 1 / Person 2 | Migration keeps it `nologin`; set login + password out of band; `bootstrap.sql` needs no change (ai migration owns schema + grants) |
-| Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text |
+| Gemini model access (free-tier key) | Open | Person 2 | `gemini-2.5-*` closed to new keys; pro models (`v1beta`) return 429 on this key, so FAST = PRO = `gemini-3.5-flash`; free-tier latency 18–46 s per call puts the < 15 s verdict target at risk; no paid keys: fall back to a free GitHub Models model behind `LLMClient`; only synthetic/redacted data on free tiers |
+| Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text, incl. the safety footer, neutral line and banned-claim/profiling keywords in `app/guardrails/safety.py` |
 
 **Active blockers:** none in code; live Supabase/AI/FCM/WhatsApp verification requires their runtimes and credentials.
 
@@ -233,6 +236,16 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-26 — AI Phase 4: guardrails
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service/app/guardrails`, branch `ai/phase-4-guardrails` (stacked on `ai/phase-3-llm`)
+- **Changed:** `pii.py` (bank account in en/si/ta context, passport, ASCII boundaries so si/ta letters next to numbers don't shield them, numbered mapping + restore); `injection.py` (neutralise override/role/verdict/template/tool-call/block-tag patterns incl. si/ta, untrusted blocks, data-only policy); `sources.py` (`Finding` with typed citations, `ground` drops unknown document/page/rule/SLBFE record); `safety.py` (en/si/ta footer with 1989 + list date, banned legality claims, profiling questions, `finalize_user_text`); `output.py` (validated JSON, one retry with a value-free hint, fail safe); FakeLLM records the system prompt
+- **Verified:** `ruff check`, `ruff format --check`, `pytest -q` 197 passed / 7 skipped (integration gated); 27 PII fixtures (en/si/ta) fully redacted; 6 injection fixtures (en/si/ta) leave the grounded outcome unchanged; footer present in all 3 locales via `finalize_user_text`. Not verified: live Gemini behaviour with injected documents (Phase 5 manual run)
+- **Decisions:** keep `redact() -> str` for logs/LLM hook and add `redact_with_mapping()` instead of changing the signature; verdict-like extra fields in model output are rejected, not ignored
+- **Blocked:** si/ta guardrail wording needs native review (Person 3)
+- **Next:** Phase 5 (document extraction)
 
 ### 2026-11-26 — notification-service implementation
 
@@ -243,6 +256,16 @@
 - **Decisions:** FCM HTTP v1 is the push provider (Expo removed); FCM data is stringified and carries `type`/`notification_id`/`deep_link`; WhatsApp stays disabled by default and needs a recipient source; runtime role uses DML only with an admin migration DSN; quiet hours defer by default (`Asia/Colombo`)
 - **Blocked:** FCM credentials and WhatsApp template/recipient decisions; per-peer internal secrets before release
 - **Next:** add Firebase credentials and run a live FCM push; decide WhatsApp recipient source and approve templates
+
+### 2026-11-24 — AI Phase 3: LLM adapter and usage accounting
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service/app/llm`, PR #2 merge
+- **Changed:** PR #2 (phases 0–2) merged to `main` after adding `respx` to core's CI install (core-api job was already failing on `main`); `app/llm/base.py` (`LLMClient`, tiers, errors, PII hook), `gemini.py` (JSON schema output, safety settings, hard timeout, bounded retries with jitter, error mapping and redaction, owned httpx transport, low thinking for FAST), `fake.py` (deterministic, keyed on redacted prompt), `usage.py` (cost estimates, `MeteredLLM` budget guard failing closed, `PgUsageStore`); migration `004_llm_usage.sql`; `scripts/llm_smoke.py`; defaults `gemini-3.5-flash`, `LLM_TIMEOUT_SECONDS=60`
+- **Verified:** `ruff`, `pytest -q` 76 passed / 7 skipped (retry path, 429/5xx, bounded attempts, hard timeout, transport timeout, schema failure, blocked prompt, key never in URL or errors, redacted prompt on the wire); integration 7/7 on Postgres 16 and Supabase (runtime role); live smoke: typed `SmokeResult` from `gemini-3.5-flash` (66 in / 87 out); PR #2 CI all 5 jobs green
+- **Decisions:** per-call ledger table instead of only `analysis_runs` (chat calls have no run); FAST tier low thinking (46 s → 18.5 s on the same prompt); cost table holds only `gemini-3.5-flash` (USD 1.50 / 9.00 per 1M, Google list price)
+- **Blocked:** PRO-tier models need a paid key (see blockers)
+- **Next:** Phase 4 (guardrails)
 
 ### 2026-11-24 — AI Phase 2: `ai` schema and database access
 

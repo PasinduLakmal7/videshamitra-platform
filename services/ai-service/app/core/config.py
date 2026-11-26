@@ -54,9 +54,10 @@ class Settings(BaseSettings):
     INTERNAL_JWT_SECRET: SecretStr = Field(min_length=MIN_SECRET_LENGTH)
 
     GEMINI_API_KEY: SecretStr = SecretStr("")
-    GEMINI_MODEL_FAST: str = "gemini-2.5-flash"
-    GEMINI_MODEL_PRO: str = "gemini-2.5-pro"
-    LLM_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0)
+    # Live-checked 2026-11-24: 2.5 models are closed to new keys; pro tiers need a paid key.
+    GEMINI_MODEL_FAST: str = "gemini-3.5-flash"
+    GEMINI_MODEL_PRO: str = "gemini-3.5-flash"
+    LLM_TIMEOUT_SECONDS: float = Field(default=60.0, gt=0)
     LLM_MAX_RETRIES: int = Field(default=2, ge=0, le=5)
     LLM_DAILY_TOKEN_BUDGET: int = Field(default=1_000_000, ge=0)
 

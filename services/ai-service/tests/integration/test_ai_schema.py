@@ -28,6 +28,7 @@ EXPECTED_TABLES = {
     "red_flag_rules",
     "chat_sessions",
     "chat_messages",
+    "llm_usage",
 }
 
 
@@ -99,6 +100,11 @@ async def _assert_role_isolated(role_conn: asyncpg.Connection) -> None:
         "insert into ai.chat_messages (session_id, role, content_redacted) "
         "values ($1, 'user', 'hello')",
         session_id,
+    )
+    await role_conn.execute(
+        "insert into ai.llm_usage (model, purpose, run_id, tokens_in, tokens_out) "
+        "values ('m', 'test', $1, 1, 1)",
+        run_id,
     )
     assert await role_conn.fetchval("select count(*) from ai.red_flag_rules") > 0
     await role_conn.execute("delete from ai.analysis_runs where id = $1", run_id)
