@@ -57,6 +57,7 @@ ignore = ["B008"]
 [tool.ruff.lint.per-file-ignores]
 # A per-call provider deadline, enforced with asyncio.timeout inside the provider.
 "app/llm/*" = ["ASYNC109"]
+"app/guardrails/output.py" = ["ASYNC109"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

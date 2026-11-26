@@ -51,9 +51,18 @@ class FakeLLM:
         name = schema.__name__ if schema else TEXT
         self.responses[prompt_key(parts, name, tier)] = value
 
-    def _answer(self, parts: list[Part], name: str, tier: ModelTier, meta: CallMeta | None):
+    def _answer(
+        self,
+        parts: list[Part],
+        name: str,
+        tier: ModelTier,
+        meta: CallMeta | None,
+        system: str | None = None,
+    ):
         sent = redact_parts(parts)
-        self.calls.append({"parts": sent, "schema": name, "tier": tier, "meta": meta})
+        self.calls.append(
+            {"parts": sent, "schema": name, "tier": tier, "meta": meta, "system": system}
+        )
         key = prompt_key(parts, name, tier)
         if key not in self.responses:
             raise LLMInvalidOutput("No fake response registered for this prompt")
@@ -74,7 +83,7 @@ class FakeLLM:
         timeout: float | None = None,
         meta: CallMeta | None = None,
     ) -> tuple[T, Usage]:
-        value, usage = self._answer(parts, schema.__name__, tier, meta)
+        value, usage = self._answer(parts, schema.__name__, tier, meta, system)
         try:
             return schema.model_validate(value), usage
         except ValidationError as exc:
@@ -89,7 +98,7 @@ class FakeLLM:
         timeout: float | None = None,
         meta: CallMeta | None = None,
     ) -> tuple[str, Usage]:
-        value, usage = self._answer(parts, TEXT, tier, meta)
+        value, usage = self._answer(parts, TEXT, tier, meta, system)
         return str(value), usage
 
     async def transcribe(
