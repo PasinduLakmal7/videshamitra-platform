@@ -1,6 +1,6 @@
 # Project Progress
 
-**Last updated:** 2026-11-24
+**Last updated:** 2026-11-26
 **Current phase:** M0–M4 core backend implemented and security-hardened; M5 admin portal pages in place; AI/notification services, worker web and live-Supabase verification pending
 **Team:** 3 people — Person 1 platform/core/admin/infra, Person 2 AI (`ai-service`), Person 3 worker web + Flutter mobile + research
 **Mobile app:** Flutter, separate repository (docs/contracts only here)
@@ -18,7 +18,7 @@
 | Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI/notification stubs |
-| AI service (`ai-service`) | 🚧 Skeleton, `ai` schema, LLM adapter | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–004 + least-privilege role; Gemini adapter, fake LLM, usage ledger + daily budget; 76 unit + 7 integration tests | Phase 4 guardrails |
+| AI service (`ai-service`) | 🚧 Skeleton, `ai` schema, LLM adapter, guardrails | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–004 + least-privilege role; Gemini adapter, fake LLM, usage ledger + daily budget; guardrails (PII, injection, cited findings, safety footer, validated output); 197 unit + 7 integration tests | Phase 5 extraction |
 | Notification service | ⏸️ Placeholder | `services/notification-service/README.md` | Implement device/preference/delivery |
 | Worker web (`web-frontend`) | ⚠️ Vite starter mounted | `main.jsx` renders the template `App.jsx`; TS app is unmounted stubs | Person 3: fix mount, add lint/typecheck to CI |
 | Admin portal (`admin-frontend`) | 🚧 Pages implemented | Login, dashboard, cases, agencies, users, audit; `tsc`/build pass | Playwright E2E + live API |
@@ -137,8 +137,8 @@
 
 ### Person 2 — AI (`ai-service`)
 
-1. Phase 4: guardrails (full PII set, prompt-injection wrapping, cited
-   findings only, safety footer, output validation with one retry).
+1. Phase 5: document extraction and multi-page stitching (use `wrap_untrusted` +
+   `generate_validated`; findings carry `guardrails.sources.Citation`).
 2. Consume `verification.requested` from `vm:ai:requests` and publish
    `verification.completed` / `verification.failed` to `vm:ai:results`.
 3. Implement `/internal/v1/analyses/{verification_id}` for the admin trace proxy.
@@ -188,6 +188,7 @@
 | AI/notification Compose | ai-service added (internal network, no ports, no `env_file`, explicit env); notification-service pending |
 | ai-service settings | Root `.env` first, then `services/ai-service/.env` overrides it (own `ai_service_role` DSN) |
 | LLM | Gemini via `google-genai` behind `LLMClient`; every call through `MeteredLLM` (PII redaction, ledger `ai.llm_usage`, daily token budget fails closed); SDK given an owned `httpx.AsyncClient` (it otherwise picks `httpx2`); FAST tier uses low thinking |
+| AI guardrails | `app/guardrails/`: `redact` (logs, LLM hook) + `redact_with_mapping`/`restore` for user output; `wrap_untrusted` + `with_policy` on every prompt with untrusted text; `generate_validated` for every structured call (one retry, hint without values); `ground` drops findings without a known document page, SLBFE record or rule row (none left → `unable_to_verify`); every user-facing verdict/answer goes through `finalize_user_text` (Phases 7, 10) |
 | ai-service DB access | Runtime `DATABASE_URL` = `ai_service_role` (DML on `ai` only); migrations use `MIGRATION_DATABASE_URL` (admin); LangGraph checkpointer `setup()` runs as admin in Phase 8 |
 
 ---
@@ -210,8 +211,8 @@
 | `/internal/v1/audit-events` accepts any allowed issuer | Open (minor) | Person 1 | Spec says `iss=ai-service` only; other internal routes already enforce it |
 | Supabase CLI writes `supabase/.branches/`, `supabase/.temp/` | Open (minor) | Person 1 | Untracked after `supabase start`; consider adding to `.gitignore` |
 | `ai_service_role` login/password per environment | Open | Person 1 / Person 2 | Migration keeps it `nologin`; set login + password out of band; `bootstrap.sql` needs no change (ai migration owns schema + grants) |
-| Gemini model access (free-tier key) | Open | Person 2 | `gemini-2.5-*` closed to new keys; pro models (`v1beta`) return 429 on this key, so FAST = PRO = `gemini-3.5-flash`; free-tier latency 18–46 s per call puts the < 15 s verdict target at risk; paid key needed for PRO and real data |
-| Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text |
+| Gemini model access (free-tier key) | Open | Person 2 | `gemini-2.5-*` closed to new keys; pro models (`v1beta`) return 429 on this key, so FAST = PRO = `gemini-3.5-flash`; free-tier latency 18–46 s per call puts the < 15 s verdict target at risk; no paid keys: fall back to a free GitHub Models model behind `LLMClient`; only synthetic/redacted data on free tiers |
+| Demo rule data + si/ta wording | Open | Person 2 / Person 3 | `ai.fee_rules`/`wage_floors`/`red_flag_rules` are DEMO (marked in `source`); replace with sourced SLBFE figures; native review of si/ta text, incl. the safety footer, neutral line and banned-claim/profiling keywords in `app/guardrails/safety.py` |
 
 **Active blockers:** none in code; live Supabase/AI/notification verification requires their runtimes.
 
@@ -220,6 +221,16 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-26 — AI Phase 4: guardrails
+
+- **Agent/session:** coding agent (Person 2 session)
+- **Scope:** `services/ai-service/app/guardrails`, branch `ai/phase-4-guardrails` (stacked on `ai/phase-3-llm`)
+- **Changed:** `pii.py` (bank account in en/si/ta context, passport, ASCII boundaries so si/ta letters next to numbers don't shield them, numbered mapping + restore); `injection.py` (neutralise override/role/verdict/template/tool-call/block-tag patterns incl. si/ta, untrusted blocks, data-only policy); `sources.py` (`Finding` with typed citations, `ground` drops unknown document/page/rule/SLBFE record); `safety.py` (en/si/ta footer with 1989 + list date, banned legality claims, profiling questions, `finalize_user_text`); `output.py` (validated JSON, one retry with a value-free hint, fail safe); FakeLLM records the system prompt
+- **Verified:** `ruff check`, `ruff format --check`, `pytest -q` 197 passed / 7 skipped (integration gated); 27 PII fixtures (en/si/ta) fully redacted; 6 injection fixtures (en/si/ta) leave the grounded outcome unchanged; footer present in all 3 locales via `finalize_user_text`. Not verified: live Gemini behaviour with injected documents (Phase 5 manual run)
+- **Decisions:** keep `redact() -> str` for logs/LLM hook and add `redact_with_mapping()` instead of changing the signature; verdict-like extra fields in model output are rejected, not ignored
+- **Blocked:** si/ta guardrail wording needs native review (Person 3)
+- **Next:** Phase 5 (document extraction)
 
 ### 2026-11-24 — AI Phase 3: LLM adapter and usage accounting
 
