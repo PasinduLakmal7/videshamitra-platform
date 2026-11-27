@@ -1,0 +1,35 @@
+flowchart LR
+    U["Workers and staff<br/>mobile app - worker web - admin portal"]
+    K["Kong API gateway<br/>single public entry point"]
+    C["core-api<br/>public API + transactional core<br/>background workers"]
+    A["ai-service<br/>LangGraph + Gemini<br/>OCR - chat - speech"]
+    N["notification-service<br/>FCM + WhatsApp delivery"]
+    D[("Supabase Postgres + Storage<br/>Redis Streams")]
+    E["External providers<br/>Supabase Auth - SLBFE - Gemini<br/>FCM - WhatsApp - SMS"]
+
+    U -->|HTTPS| K
+    K --> C
+    C -->|sync - service JWT| A
+    A -.->|result events| C
+    C -.->|events| N
+    C --> D
+    A --> D
+    N --> D
+    C --> E
+    A --> E
+    N --> E
+
+    classDef people fill:#e3f2fd,stroke:#1565c0,color:#0d47a1
+    classDef edge fill:#fff3e0,stroke:#ef6c00,stroke-width:2px,color:#e65100
+    classDef core fill:#e8f5e9,stroke:#2e7d32,color:#1b5e20
+    classDef ai fill:#f3e5f5,stroke:#7b1fa2,color:#4a148c
+    classDef notify fill:#e0f7fa,stroke:#00838f,color:#006064
+    classDef data fill:#eceff1,stroke:#455a64,color:#263238
+    classDef ext fill:#fce4ec,stroke:#ad1457,color:#880e4f
+    class U people
+    class K edge
+    class C core
+    class A ai
+    class N notify
+    class D data
+    class E ext

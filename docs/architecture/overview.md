@@ -54,6 +54,8 @@ Services reference each other by ID only. There are no cross-schema joins or for
 
 - [System architecture](system-architecture.md) — whole-platform view: context,
   flows, data, security, deployment, reliability, status
+- [Architecture diagrams](diagrams.md) — one document with the large detailed
+  diagram and the small at-a-glance diagram
 - [Microservice architecture](microservices.md) — boundaries, ownership, events
 - [Core API plan](../core-api-plan.md)
 - [API endpoints](../api/endpoints.md)
