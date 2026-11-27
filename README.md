@@ -122,6 +122,7 @@ The agent engine runs in `services/ai-service/` (planned, Person 2) on Gemini be
 ## 📚 Documentation
 
 - [System architecture](docs/architecture/system-architecture.md)
+- [Architecture diagrams](docs/architecture/diagrams.md) — large detailed view and small at-a-glance view
 - [Architecture overview](docs/architecture/overview.md)
 - [Microservice architecture](docs/architecture/microservices.md)
 - [Core API implementation plan](docs/core-api-plan.md)

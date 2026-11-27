@@ -1,6 +1,6 @@
 # Project Progress
 
-**Last updated:** 2026-11-26
+**Last updated:** 2026-11-27
 **Current phase:** M0–M4 core backend implemented and security-hardened; M5 admin portal pages in place; notification-service implemented; AI service, worker web and live-Supabase verification pending
 **Team:** 3 people — Person 1 platform/core/admin/infra, Person 2 AI (`ai-service`), Person 3 worker web + Flutter mobile + research
 **Mobile app:** Flutter, separate repository (docs/contracts only here)
@@ -15,7 +15,7 @@
 
 | Area | Status | Evidence / location | Next |
 |---|---|---|---|
-| Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
+| Documentation & architecture | ✅ Done for current phase | `docs/architecture/system-architecture.md`, `microservices.md`, `diagrams.md`, `docs/core-api-plan.md`, `docs/api/openapi.json` | Keep in sync with code |
 | Repo restructure | ✅ Done | `services/core-api/`, `packages/contracts/`; `web-backend/` removed | — |
 | Core API (`core-api`) | 🚧 Implemented; live integration pending | `services/core-api/app`, 65 OpenAPI paths | Verify against Supabase Auth/Storage; AI stub + notification live providers |
 | AI service (`ai-service`) | 🚧 Skeleton, `ai` schema, LLM adapter, guardrails | `services/ai-service`: health, internal JWT, core client, PII-safe logs; `ai` migrations 001–004 + least-privilege role; Gemini adapter, fake LLM, usage ledger + daily budget; guardrails (PII, injection, cited findings, safety footer, validated output); 197 unit + 7 integration tests | Phase 5 extraction |
@@ -105,6 +105,7 @@
 - [x] Security audit fixes (critical/high): dev OTP lock-down, insecure-default rejection, `ENVIRONMENT` defaults to production, RLS/storage write lock-down (`011`), OTP/login rate limits fail closed with trusted client IP, stale `pending` recovery with retry cap, check-in consent revoke, SLBFE import source lock-down, internal token lifetime + per-route issuer, chat attachment ownership, hardened frontend images, Compose env fixes, admin session storage.
 - [x] 3-person work division, Flutter + FCM mobile docs, ai-service contract (`docs/ai-agents/multi-agent-spec.md`).
 - [x] notification-service implementation: `notification` schema + role, internal device/preference API, stream consumer/dedupe/DLQ, quiet hours, delivery worker, FCM/WhatsApp/stub adapters, Compose + CI; 63 unit/contract + 5 integration tests.
+- [x] Architecture diagrams document: `docs/architecture/diagrams.md` with a large detailed container view, a small at-a-glance view, zone/flow/event/data tables, and SVG/PNG assets.
 
 ---
 
@@ -236,6 +237,16 @@
 ## Run log
 
 > Newest first. One entry per agent run. Keep it short.
+
+### 2026-11-27 — Architecture diagrams document
+
+- **Agent/session:** coding agent
+- **Scope:** architecture documentation
+- **Changed:** added `docs/architecture/diagrams.md` (large detailed and small at-a-glance architecture diagrams, zone/flow/event/data tables, conventions, status); added rendered Mermaid assets in `docs/architecture/diagrams/`; linked the document from `README.md`, `docs/architecture/overview.md`, and `docs/architecture/system-architecture.md`
+- **Verified:** both Mermaid sources render with mermaid-cli 12.2.0; markdown links and fences checked; no code tests run (docs-only)
+- **Decisions:** keep Mermaid sources beside the rendered SVG/PNG assets; the large view is a layered flowchart because a C4 container diagram overlapped relationship labels at this graph size
+- **Blocked:** none
+- **Next:** keep the diagrams aligned with `ai-service` as its phases land
 
 ### 2026-11-26 — AI Phase 4: guardrails
 

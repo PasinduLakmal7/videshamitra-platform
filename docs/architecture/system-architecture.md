@@ -674,6 +674,8 @@ actions.
 
 ## 19. Related documents
 
+- [Architecture diagrams](diagrams.md) — large detailed view and small
+  at-a-glance view in one document
 - [Microservice boundaries, events, and deployment](microservices.md)
 - [Core API implementation plan](../core-api-plan.md)
 - [API endpoints and contract](../api/endpoints.md)
